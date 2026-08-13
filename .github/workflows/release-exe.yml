@@ -1,0 +1,97 @@
+name: Release Windows EXE
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/release-exe.yml'
+      - 'release/windows/launcher/WindowsLauncher.java'
+
+permissions:
+  contents: write
+
+jobs:
+  exe:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      TAG: v0.2.1-windows
+      VERSION: 0.2.1
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Test and build
+        run: gradle clean test bootJar
+
+      - name: Compile GUI launcher
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force launcher-classes,package-input | Out-Null
+          javac -encoding UTF-8 -d launcher-classes release/windows/launcher/WindowsLauncher.java
+          jar --create --file package-input/launcher.jar --main-class br.com.jaaschenbrenner.budgetai.launcher.WindowsLauncher -C launcher-classes .
+          $app = Get-ChildItem build/libs/*.jar | Where-Object { $_.Name -notlike '*-plain.jar' } | Select-Object -First 1
+          if (-not $app) { throw 'Spring Boot JAR not found' }
+          Copy-Item $app.FullName package-input/budget-ai.jar
+
+      - name: Download bundled Java runtime
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP 'jre21.zip'
+          $dir = Join-Path $env:RUNNER_TEMP 'jre21'
+          Invoke-WebRequest 'https://api.adoptium.net/v3/binary/latest/21/ga/windows/x64/jre/hotspot/normal/eclipse' -OutFile $zip
+          Expand-Archive $zip $dir -Force
+          $root = Get-ChildItem $dir -Directory | Select-Object -First 1
+          if (-not $root) { throw 'JRE not found' }
+          "JRE_ROOT=$($root.FullName)" | Out-File $env:GITHUB_ENV -Append
+
+      - name: Ensure WiX
+        shell: pwsh
+        run: |
+          if (-not (Get-Command light.exe -ErrorAction SilentlyContinue)) {
+            choco install wixtoolset --no-progress -y
+            $wix = Get-ChildItem "${env:ProgramFiles(x86)}" -Directory | Where-Object { $_.Name -like 'WiX Toolset*' } | Sort-Object Name -Descending | Select-Object -First 1
+            if ($wix) {
+              $bin = Join-Path $wix.FullName 'bin'
+              $bin | Out-File $env:GITHUB_PATH -Append
+              $env:PATH = "$bin;$env:PATH"
+            }
+          }
+          where.exe light.exe
+
+      - name: Build installer EXE
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          jpackage --type exe --name BudgetAI --app-version $env:VERSION --vendor 'Joao Aschenbrenner - DIO' --description 'DIO Spring AI com NVIDIA NIM' --input package-input --main-jar launcher.jar --main-class br.com.jaaschenbrenner.budgetai.launcher.WindowsLauncher --runtime-image $env:JRE_ROOT --dest dist --win-dir-chooser --win-menu --win-shortcut --win-per-user-install
+          if ($LASTEXITCODE -ne 0) { throw 'jpackage failed' }
+          $exe = Get-ChildItem dist/*.exe | Select-Object -First 1
+          if (-not $exe) { throw 'EXE not generated' }
+          Copy-Item $exe.FullName BudgetAI-Setup-v0.2.1-Windows-x64.exe
+          (Get-FileHash BudgetAI-Setup-v0.2.1-Windows-x64.exe -Algorithm SHA256).Hash | Out-File BudgetAI-Setup-v0.2.1-Windows-x64.exe.sha256 -Encoding ascii
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BudgetAI-Windows-EXE
+          path: |
+            BudgetAI-Setup-v0.2.1-Windows-x64.exe
+            BudgetAI-Setup-v0.2.1-Windows-x64.exe.sha256
+
+      - name: Publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view $env:TAG 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $env:TAG --target $env:GITHUB_SHA --title 'Budget AI v0.2.1 - Windows EXE' --prerelease --notes 'Instalador Windows com Java 21 embutido. Abra BudgetAI, informe a NVIDIA API Key e use o painel local. Chat e Tool Calling usam NVIDIA NIM com z-ai/glm-5.2. O login do Codex pode ser aberto pelo botão Login Codex quando o Codex CLI estiver instalado.'
+          }
+          gh release upload $env:TAG BudgetAI-Setup-v0.2.1-Windows-x64.exe BudgetAI-Setup-v0.2.1-Windows-x64.exe.sha256 --clobber
