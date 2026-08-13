@@ -1,0 +1,86 @@
+name: Release NVIDIA NIM
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/release-nvidia.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      RELEASE_TAG: v0.2.0-nvidia
+      RELEASE_ZIP: BudgetAI-NVIDIA-v0.2.0-Windows-x64.zip
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Test and build
+        run: gradle clean test bootJar
+
+      - name: Prepare portable package
+        shell: pwsh
+        run: |
+          $package = 'release-package'
+          New-Item -ItemType Directory -Force -Path $package | Out-Null
+
+          $jar = Get-ChildItem build/libs/*.jar | Where-Object { $_.Name -notlike '*-plain.jar' } | Select-Object -First 1
+          if (-not $jar) { throw 'Spring Boot JAR nao encontrado.' }
+          Copy-Item $jar.FullName "$package/budget-ai.jar"
+
+          Copy-Item release/windows/start-nvidia.ps1 $package/
+          Copy-Item release/windows/start-nvidia.cmd $package/
+          Copy-Item release/windows/codex-login.ps1 $package/
+          Copy-Item release/windows/codex-login.cmd $package/
+          Copy-Item README.md "$package/README.md"
+
+          $jreZip = Join-Path $env:RUNNER_TEMP 'temurin-jre21.zip'
+          $jreExtract = Join-Path $env:RUNNER_TEMP 'temurin-jre21'
+          Invoke-WebRequest -Uri 'https://api.adoptium.net/v3/binary/latest/21/ga/windows/x64/jre/hotspot/normal/eclipse' -OutFile $jreZip
+          Expand-Archive -Path $jreZip -DestinationPath $jreExtract -Force
+          $jreRoot = Get-ChildItem $jreExtract -Directory | Select-Object -First 1
+          if (-not $jreRoot) { throw 'JRE nao foi extraido.' }
+          Copy-Item $jreRoot.FullName "$package/runtime" -Recurse
+
+          Compress-Archive -Path "$package/*" -DestinationPath $env:RELEASE_ZIP -Force
+          (Get-FileHash $env:RELEASE_ZIP -Algorithm SHA256).Hash | Out-File "$env:RELEASE_ZIP.sha256" -Encoding ascii
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BudgetAI-NVIDIA-v0.2.0-Windows-x64
+          path: |
+            ${{ env.RELEASE_ZIP }}
+            ${{ env.RELEASE_ZIP }}.sha256
+          if-no-files-found: error
+
+      - name: Publish GitHub pre-release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view $env:RELEASE_TAG 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $env:RELEASE_TAG `
+              --target $env:GITHUB_SHA `
+              --title 'Budget AI v0.2.0 - NVIDIA NIM' `
+              --prerelease `
+              --notes 'Release de teste do desafio DIO Spring AI. NVIDIA NIM e z-ai/glm-5.2 sao o chat/tool-calling padrao. Inclui JRE 21, painel web local, launcher Windows e helper de login do Codex CLI. A transcricao de audio continua opcional via OPENAI_API_KEY.'
+          }
+          gh release upload $env:RELEASE_TAG $env:RELEASE_ZIP "$env:RELEASE_ZIP.sha256" --clobber
