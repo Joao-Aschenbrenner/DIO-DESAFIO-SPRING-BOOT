@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="src/main/resources/static/logo.svg" width="150" alt="Budget AI logo">
+</p>
+
 # DIO Desafio Spring Boot + Spring AI
 
 Assistente financeiro desenvolvido para o desafio final da trilha Spring Boot + Spring AI da DIO.
@@ -24,28 +28,64 @@ Modelo:   nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
 Chave:    NVIDIA_API_KEY
 ```
 
-O fluxo de áudio não precisa mais de `OPENAI_API_KEY`. Arquivos WAV e MP3 são enviados ao Nemotron Omni. Áudios pequenos podem ir inline; arquivos maiores usam temporariamente o NVIDIA Cloud Functions Asset API e o asset é removido após o processamento.
+O fluxo de áudio não precisa de `OPENAI_API_KEY`. Arquivos WAV e MP3 são enviados ao Nemotron Omni. Áudios pequenos podem ir inline; arquivos maiores usam temporariamente o NVIDIA Cloud Functions Asset API e o asset é removido após o processamento.
 
-> Observação de compatibilidade: o model card oficial da NVIDIA informa suporte de idioma **English only**. O suporte prático a fala em português deve ser validado durante os testes da aplicação.
+> Observação: o model card oficial da NVIDIA informa suporte de idioma **English only**. A qualidade prática de fala em português deve ser validada nos testes.
+
+## Correção de inicialização da v0.3.1
+
+O starter OpenAI do Spring AI pode auto-configurar mais de um tipo de modelo. O Budget AI usa a compatibilidade OpenAI apenas para o `ChatModel` conectado à NVIDIA. Os módulos não utilizados agora ficam explicitamente desativados:
+
+```properties
+spring.ai.model.chat=openai
+spring.ai.model.moderation=none
+spring.ai.model.audio.transcription=none
+spring.ai.model.audio.speech=none
+spring.ai.model.embedding=none
+spring.ai.model.image=none
+```
+
+Existe também um `ApplicationContextSmokeTest`, que deve falhar no CI caso o Spring Boot volte a exigir uma chave OpenAI durante o boot.
+
+## Tratamento de erros
+
+A aplicação possui tratamento centralizado com `@RestControllerAdvice` e `@ExceptionHandler`. Os erros REST retornam uma estrutura previsível, por exemplo:
+
+```json
+{
+  "status": 502,
+  "code": "AI_PROVIDER_ERROR",
+  "message": "A NVIDIA recusou a credencial. Verifique sua NVIDIA API Key.",
+  "path": "/api/ai/command",
+  "correlationId": "...",
+  "details": []
+}
+```
+
+Há tratamento específico para validação, arquivo acima do limite, leitura de arquivo, erros HTTP do provedor NVIDIA, estado inesperado e fallback de erro interno. Stack traces ficam no log, não na resposta enviada à interface.
+
+O launcher Windows também usa `try/catch` por categoria de falha, lê o log quando o backend encerra no boot e possui o botão **Abrir log**.
 
 ## Executável Windows
 
-A release Windows contém um instalador `.exe` com Java 21 embutido. Depois da instalação, abra **BudgetAI** pelo menu/atalho do Windows.
+A release `v0.3.1-windows` contém um instalador `.exe` com Java 21 embutido. Depois da instalação, abra **BudgetAI** pelo menu/atalho do Windows.
 
 O launcher:
 
 - solicita somente a `NVIDIA_API_KEY`;
-- usa o modelo NVIDIA Omni fixado e compatível com áudio + texto + tools;
-- inicia o backend Spring Boot automaticamente;
-- abre o painel local em `http://localhost:8080`;
+- usa o modelo NVIDIA Omni fixado;
+- inicia o Spring Boot automaticamente;
+- abre `http://localhost:8080`;
 - mantém a chave somente na memória do processo;
-- possui botão para abrir o Codex.
+- mostra diagnóstico de inicialização em caso de erro;
+- possui botão **Abrir log**;
+- possui botão **Login Codex**.
 
 ## Codex
 
-O botão **Login Codex** não depende mais de npm. Se o Codex CLI não estiver instalado, o launcher executa o instalador oficial para Windows da OpenAI e depois abre o Codex para que o usuário escolha **Sign in with ChatGPT**.
+O botão **Login Codex** não depende de npm. Se o Codex CLI não estiver instalado, o launcher tenta o instalador oficial para Windows e depois abre o Codex para o fluxo de autenticação.
 
-O login do Codex é separado da `NVIDIA_API_KEY`: Codex é uma ferramenta de desenvolvimento, enquanto a aplicação Spring AI usa NVIDIA NIM em runtime.
+O login do Codex é separado da `NVIDIA_API_KEY`: Codex é ferramenta de desenvolvimento; a aplicação Spring AI usa NVIDIA NIM em runtime.
 
 ## Endpoints
 
@@ -63,8 +103,6 @@ POST /api/transactions
 - Java 21 + Spring Boot 4;
 - Spring AI `ChatClient`;
 - DDD: Domain, Application e Infrastructure;
-- `Transaction`, `TransactionId` e `Category`;
-- Use Cases separados;
 - Spring Data JPA + H2 persistente;
 - REST API;
 - NVIDIA NIM;
@@ -73,10 +111,13 @@ POST /api/transactions
 - transcrição de WAV/MP3;
 - comando financeiro por voz;
 - painel web local;
-- validações;
+- tratamento centralizado de exceções;
+- correlation ID nos erros;
+- smoke test de inicialização;
 - testes automatizados;
 - GitHub Actions;
-- instalador Windows com runtime Java embutido.
+- instalador Windows com Java embutido;
+- logo vetorial SVG próprio.
 
 ## Desenvolvimento local
 
@@ -88,31 +129,10 @@ gradle test
 gradle bootRun
 ```
 
-Depois acesse:
-
-```text
-http://localhost:8080
-```
-
-Exemplo de comando:
-
-```text
-Registre uma despesa de 42 reais com mercado.
-```
-
-Para áudio, envie um `.wav` ou `.mp3` pelo painel ou pelo endpoint `POST /api/ai/voice-command`.
+Depois acesse `http://localhost:8080`.
 
 ## Projeto de referência da DIO
 
 https://github.com/digitalinnovationone/dio-spring-boot-learning-track/tree/main/05-spring-ai
 
 Esta implementação usa o projeto da trilha como referência de conceitos, mas foi estruturada e evoluída como uma solução própria para a entrega.
-
-## Próximas evoluções
-
-- Text-to-Speech para fechar o ciclo áudio → áudio;
-- testar e documentar a qualidade de reconhecimento em português;
-- relatórios financeiros por período;
-- novas tools;
-- Docker Compose + MySQL;
-- autenticação e auditoria.
