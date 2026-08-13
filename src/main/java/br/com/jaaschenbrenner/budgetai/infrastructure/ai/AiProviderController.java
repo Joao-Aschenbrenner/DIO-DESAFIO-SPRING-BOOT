@@ -26,16 +26,19 @@ public class AiProviderController {
     @GetMapping("/ai-provider")
     public Map<String, Object> aiProvider() {
         String nvidiaKey = System.getenv("NVIDIA_API_KEY");
-        String openAiKey = System.getenv("OPENAI_API_KEY");
+        boolean configured = nvidiaKey != null && !nvidiaKey.isBlank();
 
         return Map.of(
                 "provider", provider,
                 "model", model,
                 "baseUrl", baseUrl,
-                "nvidiaConfigured", nvidiaKey != null && !nvidiaKey.isBlank(),
+                "nvidiaConfigured", configured,
+                "textConfigured", configured,
+                "audioConfigured", configured,
                 "transcriptionProvider", transcriptionProvider,
-                "transcriptionConfigured", openAiKey != null && !openAiKey.isBlank(),
-                "codexLogin", "separate-cli-auth"
+                "modalities", "text,audio",
+                "toolCalling", true,
+                "codexLogin", "official-windows-installer"
         );
     }
 }
