@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'br.com.jaaschenbrenner'
-version = '0.3.0'
+version = '0.3.1'
 
 description = 'Desafio DIO Spring Boot + Spring AI - Assistente Financeiro por Voz'
 
