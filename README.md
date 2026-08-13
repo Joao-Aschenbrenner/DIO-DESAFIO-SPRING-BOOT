@@ -5,76 +5,47 @@ Assistente financeiro desenvolvido para o desafio final da trilha Spring Boot + 
 ## Fluxo principal
 
 ```text
-Áudio
-  ↓
-Transcrição
-  ↓
-ChatClient + Tool Calling
-  ↓
-Use Cases Java
-  ↓
-Spring Data JPA / H2
-  ↓
-Resposta
+Texto ───────────────┐
+                    ↓
+Áudio → NVIDIA Omni → ChatClient + Tool Calling → Use Cases Java → JPA/H2 → resposta
 ```
 
-A arquitetura mantém as camadas `domain`, `application` e `infrastructure`, deixando as regras de negócio fora do prompt e dos controllers.
+A arquitetura mantém as camadas `domain`, `application` e `infrastructure`. A IA interpreta a intenção e escolhe ferramentas, enquanto as regras e operações reais continuam nos casos de uso Java.
 
-## IA padrão: NVIDIA NIM
+## Uma única API NVIDIA
 
-O ChatClient e o Tool Calling usam por padrão a API OpenAI-compatible do **NVIDIA NIM**.
-
-Configuração padrão:
+A versão atual usa a mesma credencial, o mesmo modelo e o mesmo endpoint NVIDIA para chat, Tool Calling e entrada de áudio:
 
 ```text
+Provider: NVIDIA NIM
 Base URL: https://integrate.api.nvidia.com
-Modelo:   z-ai/glm-5.2
+Endpoint: /v1/chat/completions
+Modelo:   nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
 Chave:    NVIDIA_API_KEY
 ```
 
-O modelo pode ser trocado sem alterar o código:
+O fluxo de áudio não precisa mais de `OPENAI_API_KEY`. Arquivos WAV e MP3 são enviados ao Nemotron Omni. Áudios pequenos podem ir inline; arquivos maiores usam temporariamente o NVIDIA Cloud Functions Asset API e o asset é removido após o processamento.
 
-```powershell
-$env:NVIDIA_MODEL="nvidia/nemotron-3-super-120b-a12b"
-```
+> Observação de compatibilidade: o model card oficial da NVIDIA informa suporte de idioma **English only**. O suporte prático a fala em português deve ser validado durante os testes da aplicação.
 
-Nenhuma chave é salva no repositório.
+## Executável Windows
 
-## Áudio
+A release Windows contém um instalador `.exe` com Java 21 embutido. Depois da instalação, abra **BudgetAI** pelo menu/atalho do Windows.
 
-O LLM de chat é NVIDIA NIM. A transcrição de áudio está isolada e, nesta versão, continua usando o `TranscriptionModel` compatível com OpenAI:
+O launcher:
 
-```powershell
-$env:OPENAI_API_KEY="sua-chave"
-```
-
-Sem `OPENAI_API_KEY`, o restante da aplicação continua disponível e os comandos de texto podem ser testados com NVIDIA NIM.
+- solicita somente a `NVIDIA_API_KEY`;
+- usa o modelo NVIDIA Omni fixado e compatível com áudio + texto + tools;
+- inicia o backend Spring Boot automaticamente;
+- abre o painel local em `http://localhost:8080`;
+- mantém a chave somente na memória do processo;
+- possui botão para abrir o Codex.
 
 ## Codex
 
-A release inclui `codex-login.ps1` e `codex-login.cmd` para abrir o fluxo oficial de autenticação do Codex CLI.
+O botão **Login Codex** não depende mais de npm. Se o Codex CLI não estiver instalado, o launcher executa o instalador oficial para Windows da OpenAI e depois abre o Codex para que o usuário escolha **Sign in with ChatGPT**.
 
-O login do Codex é destinado ao uso do Codex como agente de desenvolvimento do projeto. Ele é separado da autenticação do Spring AI e não substitui `NVIDIA_API_KEY`.
-
-## Release para Windows
-
-A release `v0.2.0-nvidia` inclui:
-
-- `budget-ai.jar`;
-- JRE 21 embutido;
-- `start-nvidia.cmd`;
-- `start-nvidia.ps1`;
-- `codex-login.cmd`;
-- `codex-login.ps1`;
-- painel web local em `http://localhost:8080`.
-
-Para testar:
-
-1. baixe e extraia o ZIP da release;
-2. execute `start-nvidia.cmd`;
-3. cole sua NVIDIA API Key quando solicitado;
-4. o navegador abrirá `http://localhost:8080`;
-5. teste comandos como `Registre uma despesa de 42 reais com mercado`.
+O login do Codex é separado da `NVIDIA_API_KEY`: Codex é uma ferramenta de desenvolvimento, enquanto a aplicação Spring AI usa NVIDIA NIM em runtime.
 
 ## Endpoints
 
@@ -89,20 +60,23 @@ POST /api/transactions
 
 ## Recursos implementados
 
-- DDD: Domain, Application e Infrastructure;
-- `Transaction`, `TransactionId` fortemente tipado e `Category`;
-- Use Cases separados para criar e consultar transações;
-- Spring Data JPA + H2 persistente;
-- API REST;
+- Java 21 + Spring Boot 4;
 - Spring AI `ChatClient`;
-- NVIDIA NIM como provedor de chat;
+- DDD: Domain, Application e Infrastructure;
+- `Transaction`, `TransactionId` e `Category`;
+- Use Cases separados;
+- Spring Data JPA + H2 persistente;
+- REST API;
+- NVIDIA NIM;
+- Nemotron Omni para texto e áudio;
 - Tool Calling com funções reais da aplicação;
-- transcrição de áudio;
+- transcrição de WAV/MP3;
 - comando financeiro por voz;
-- painel web simples para teste;
+- painel web local;
 - validações;
 - testes automatizados;
-- GitHub Actions.
+- GitHub Actions;
+- instalador Windows com runtime Java embutido.
 
 ## Desenvolvimento local
 
@@ -114,11 +88,19 @@ gradle test
 gradle bootRun
 ```
 
-Para habilitar áudio:
+Depois acesse:
 
-```powershell
-$env:OPENAI_API_KEY="sua-chave-openai"
+```text
+http://localhost:8080
 ```
+
+Exemplo de comando:
+
+```text
+Registre uma despesa de 42 reais com mercado.
+```
+
+Para áudio, envie um `.wav` ou `.mp3` pelo painel ou pelo endpoint `POST /api/ai/voice-command`.
 
 ## Projeto de referência da DIO
 
@@ -129,9 +111,8 @@ Esta implementação usa o projeto da trilha como referência de conceitos, mas 
 ## Próximas evoluções
 
 - Text-to-Speech para fechar o ciclo áudio → áudio;
-- ASR NVIDIA NIM dedicado;
-- relatórios por período;
-- novas tools financeiras;
+- testar e documentar a qualidade de reconhecimento em português;
+- relatórios financeiros por período;
+- novas tools;
 - Docker Compose + MySQL;
-- autenticação de usuários;
-- auditoria de comandos da IA.
+- autenticação e auditoria.
