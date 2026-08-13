@@ -1,271 +1,137 @@
 # DIO Desafio Spring Boot + Spring AI
 
-Projeto desenvolvido para o desafio final da trilha Spring Boot da DIO, evoluindo a proposta de uma **API inteligente de orçamento** que recebe comandos financeiros, integra IA com casos de uso reais e mantém separação arquitetural entre domínio, aplicação e infraestrutura.
+Assistente financeiro desenvolvido para o desafio final da trilha Spring Boot + Spring AI da DIO.
 
-## O que o projeto faz
-
-A aplicação funciona como um assistente financeiro. Ela permite registrar e consultar despesas por REST e também disponibiliza endpoints de IA para interpretar comandos em linguagem natural e áudio.
-
-Fluxo principal implementado:
+## Fluxo principal
 
 ```text
 Áudio
   ↓
-TranscriptionModel
-  ↓
-Texto transcrito
+Transcrição
   ↓
 ChatClient + Tool Calling
   ↓
-CreateTransactionUseCase / ListTransactionsUseCase
+Use Cases Java
   ↓
-TransactionRepository
+Spring Data JPA / H2
   ↓
-H2 / JPA
-  ↓
-Resposta da IA
+Resposta
 ```
 
-## Evoluções implementadas
+A arquitetura mantém as camadas `domain`, `application` e `infrastructure`, deixando as regras de negócio fora do prompt e dos controllers.
 
-Além da base conceitual apresentada no desafio, esta versão adiciona:
+## IA padrão: NVIDIA NIM
 
-- domínio próprio com `Transaction`, `TransactionId` fortemente tipado e `Category`;
-- separação DDD em `domain`, `application` e `infrastructure`;
-- casos de uso individuais para criação e consulta de transações;
-- persistência real via Spring Data JPA + H2;
-- API REST tradicional para criar e consultar despesas;
-- `ChatClient` configurado com tools reais da aplicação;
-- Tool Calling para registrar e listar despesas;
-- endpoint de comando textual com IA;
-- endpoint de transcrição de áudio;
-- endpoint integrado de comando por voz: transcreve o áudio e envia a intenção ao `ChatClient`;
-- validações de entrada;
-- teste unitário do caso de uso sem depender de API externa;
-- GitHub Actions para executar os testes automaticamente.
+O ChatClient e o Tool Calling usam por padrão a API OpenAI-compatible do **NVIDIA NIM**.
 
-## Arquitetura
+Configuração padrão:
 
 ```text
-br.com.jaaschenbrenner.budgetai
-├── domain
-│   ├── Transaction.java
-│   ├── TransactionId.java
-│   ├── Category.java
-│   └── TransactionRepository.java
-├── application
-│   ├── CreateTransactionInput.java
-│   ├── CreateTransactionUseCase.java
-│   ├── ListTransactionsUseCase.java
-│   └── TransactionOutput.java
-└── infrastructure
-    ├── ai
-    │   ├── AiConfiguration.java
-    │   ├── AiController.java
-    │   ├── FinanceTools.java
-    │   ├── TranscriptionController.java
-    │   └── VoiceCommandController.java
-    ├── config
-    │   └── UseCaseConfiguration.java
-    ├── persistence
-    │   ├── TransactionEntity.java
-    │   ├── SpringDataTransactionRepository.java
-    │   └── JpaTransactionRepositoryAdapter.java
-    └── web
-        └── TransactionController.java
+Base URL: https://integrate.api.nvidia.com
+Modelo:   z-ai/glm-5.2
+Chave:    NVIDIA_API_KEY
 ```
 
-A camada **Domain** contém o modelo e as regras fundamentais. A **Application** coordena os casos de uso. A **Infrastructure** contém REST, Spring AI, banco de dados e integrações externas.
-
-## Tecnologias
-
-- Java 21
-- Spring Boot 4
-- Spring AI 2
-- Spring Web
-- Spring Data JPA
-- Bean Validation
-- OpenAI via Spring AI
-- ChatClient
-- Tool Calling
-- TranscriptionModel
-- H2 Database
-- Gradle
-- JUnit 5
-- GitHub Actions
-
-## Como executar
-
-### 1. Pré-requisitos
-
-- JDK 21+
-- Gradle instalado
-- chave da OpenAI para os endpoints de IA
-
-### 2. Configure a chave
-
-No PowerShell:
+O modelo pode ser trocado sem alterar o código:
 
 ```powershell
-$env:OPENAI_API_KEY="sua-chave-aqui"
+$env:NVIDIA_MODEL="nvidia/nemotron-3-super-120b-a12b"
 ```
 
-No Linux/macOS:
+Nenhuma chave é salva no repositório.
 
-```bash
-export OPENAI_API_KEY="sua-chave-aqui"
+## Áudio
+
+O LLM de chat é NVIDIA NIM. A transcrição de áudio está isolada e, nesta versão, continua usando o `TranscriptionModel` compatível com OpenAI:
+
+```powershell
+$env:OPENAI_API_KEY="sua-chave"
 ```
 
-**Nunca coloque a chave real no repositório.**
+Sem `OPENAI_API_KEY`, o restante da aplicação continua disponível e os comandos de texto podem ser testados com NVIDIA NIM.
 
-### 3. Execute os testes
+## Codex
 
-```bash
+A release inclui `codex-login.ps1` e `codex-login.cmd` para abrir o fluxo oficial de autenticação do Codex CLI.
+
+O login do Codex é destinado ao uso do Codex como agente de desenvolvimento do projeto. Ele é separado da autenticação do Spring AI e não substitui `NVIDIA_API_KEY`.
+
+## Release para Windows
+
+A release `v0.2.0-nvidia` inclui:
+
+- `budget-ai.jar`;
+- JRE 21 embutido;
+- `start-nvidia.cmd`;
+- `start-nvidia.ps1`;
+- `codex-login.cmd`;
+- `codex-login.ps1`;
+- painel web local em `http://localhost:8080`.
+
+Para testar:
+
+1. baixe e extraia o ZIP da release;
+2. execute `start-nvidia.cmd`;
+3. cole sua NVIDIA API Key quando solicitado;
+4. o navegador abrirá `http://localhost:8080`;
+5. teste comandos como `Registre uma despesa de 42 reais com mercado`.
+
+## Endpoints
+
+```text
+GET  /api/system/ai-provider
+POST /api/ai/command
+POST /api/ai/transcribe
+POST /api/ai/voice-command
+GET  /api/transactions
+POST /api/transactions
+```
+
+## Recursos implementados
+
+- DDD: Domain, Application e Infrastructure;
+- `Transaction`, `TransactionId` fortemente tipado e `Category`;
+- Use Cases separados para criar e consultar transações;
+- Spring Data JPA + H2 persistente;
+- API REST;
+- Spring AI `ChatClient`;
+- NVIDIA NIM como provedor de chat;
+- Tool Calling com funções reais da aplicação;
+- transcrição de áudio;
+- comando financeiro por voz;
+- painel web simples para teste;
+- validações;
+- testes automatizados;
+- GitHub Actions.
+
+## Desenvolvimento local
+
+Pré-requisitos: Java 21 e Gradle.
+
+```powershell
+$env:NVIDIA_API_KEY="sua-chave-nvidia"
 gradle test
-```
-
-O teste de domínio/aplicação não depende da OpenAI.
-
-### 4. Inicie a aplicação
-
-```bash
 gradle bootRun
 ```
 
-Por padrão:
+Para habilitar áudio:
 
-```text
-http://localhost:8080
+```powershell
+$env:OPENAI_API_KEY="sua-chave-openai"
 ```
 
-## Como testar
-
-### Criar uma despesa sem IA
-
-```http
-POST /api/transactions
-Content-Type: application/json
-
-{
-  "description": "Almoço",
-  "amountInCents": 4590,
-  "category": "ALIMENTACAO"
-}
-```
-
-### Listar despesas
-
-```http
-GET /api/transactions
-```
-
-Filtrando por categoria:
-
-```http
-GET /api/transactions?category=ALIMENTACAO
-```
-
-### Comando textual com IA
-
-```http
-POST /api/ai/command
-Content-Type: application/json
-
-{
-  "text": "Registre 50 reais de combustível na categoria transporte"
-}
-```
-
-O modelo pode decidir chamar a tool `registrarDespesa`, que executa um caso de uso real e grava a transação no banco.
-
-Outro exemplo:
-
-```json
-{
-  "text": "Liste minhas despesas de alimentação"
-}
-```
-
-### Transcrever um áudio
-
-Envie um arquivo multipart para:
-
-```text
-POST /api/ai/transcribe
-campo: file
-```
-
-### Executar um comando financeiro por voz
-
-Envie um arquivo multipart para:
-
-```text
-POST /api/ai/voice-command
-campo: file
-```
-
-Esse endpoint executa:
-
-```text
-arquivo → transcrição → ChatClient → Tool Calling → caso de uso → banco → resposta
-```
-
-Exemplo de fala:
-
-> "Gastei cinquenta reais no posto com combustível."
-
-## Segurança da chave de IA
-
-O projeto usa:
-
-```properties
-spring.ai.openai.api-key=${OPENAI_API_KEY:}
-```
-
-Assim a credencial fica fora do Git. O arquivo `.gitignore` também ignora `.env`.
-
-## Testes e validação
-
-O repositório possui um teste unitário para garantir que o caso de uso de criação:
-
-- persista a transação por meio do contrato `TransactionRepository`;
-- mantenha o valor internamente em centavos;
-- converta corretamente o valor para a saída monetária;
-- funcione sem Spring, banco de dados ou IA.
-
-O GitHub Actions executa `gradle test` a cada push e pull request.
-
-## Relação com o projeto da DIO
-
-Este projeto foi criado para a entrega do desafio final de Spring AI da DIO e segue os conceitos apresentados na trilha:
-
-- DDD;
-- Clean Architecture / Use Cases;
-- Spring Web;
-- Spring Data;
-- integração com serviços externos;
-- Spring AI;
-- `ChatClient`;
-- Tool Calling;
-- Speech-to-Text.
-
-A implementação deste repositório foi evoluída como uma solução própria para demonstrar os conceitos, em vez de simplesmente reproduzir o projeto do expert.
-
-Projeto de referência da trilha:
+## Projeto de referência da DIO
 
 https://github.com/digitalinnovationone/dio-spring-boot-learning-track/tree/main/05-spring-ai
 
-## O que ainda pode ser evoluído
+Esta implementação usa o projeto da trilha como referência de conceitos, mas foi estruturada e evoluída como uma solução própria para a entrega.
+
+## Próximas evoluções
 
 - Text-to-Speech para fechar o ciclo áudio → áudio;
+- ASR NVIDIA NIM dedicado;
 - relatórios por período;
-- novas tools para totais e estatísticas;
-- testes de integração reais do Spring AI condicionados à presença de `OPENAI_API_KEY`;
-- Docker Compose com MySQL;
-- autenticação e associação das transações a usuários;
-- documentação OpenAPI/Swagger;
-- auditoria dos comandos interpretados pela IA.
-
-## O que aprendi
-
-O principal aprendizado deste desafio é que integrar IA em uma aplicação real não significa colocar regras de negócio dentro do prompt. A IA interpreta a intenção e escolhe ferramentas, enquanto os casos de uso Java continuam responsáveis por executar as operações reais do sistema. Essa separação mantém o projeto testável, organizado e mais fácil de evoluir.
+- novas tools financeiras;
+- Docker Compose + MySQL;
+- autenticação de usuários;
+- auditoria de comandos da IA.
