@@ -17,12 +17,15 @@ import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -38,6 +41,7 @@ public final class WindowsLauncher {
     private final JButton startButton = new JButton("Iniciar Budget AI");
     private final JButton openButton = new JButton("Abrir painel");
     private final JButton codexButton = new JButton("Login Codex");
+    private final JButton logButton = new JButton("Abrir log");
     private final JButton stopButton = new JButton("Parar");
 
     private volatile Process serverProcess;
@@ -48,6 +52,7 @@ public final class WindowsLauncher {
             try {
                 UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
             } catch (Exception ignored) {
+                // O look-and-feel padrão do Java continua funcionando.
             }
             new WindowsLauncher().show();
         });
@@ -59,11 +64,16 @@ public final class WindowsLauncher {
             nvidiaKeyField.setText(envNvidia);
         }
         modelField.setEditable(false);
+        try {
+            logFile = resolveDataDir().resolve("logs").resolve("budget-ai.log");
+        } catch (IOException ignored) {
+            // O caminho será recriado ao iniciar o backend.
+        }
     }
 
     private void show() {
         frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
-        frame.setMinimumSize(new Dimension(760, 330));
+        frame.setMinimumSize(new Dimension(790, 350));
         frame.setLocationRelativeTo(null);
 
         JPanel form = new JPanel(new GridLayout(0, 1, 8, 8));
@@ -80,6 +90,7 @@ public final class WindowsLauncher {
         actions.add(startButton);
         actions.add(openButton);
         actions.add(codexButton);
+        actions.add(logButton);
         actions.add(stopButton);
 
         JPanel status = new JPanel(new BorderLayout());
@@ -93,6 +104,7 @@ public final class WindowsLauncher {
         startButton.addActionListener(e -> startAsync());
         openButton.addActionListener(e -> openPanel());
         codexButton.addActionListener(e -> launchCodex());
+        logButton.addActionListener(e -> openLog());
         stopButton.addActionListener(e -> stopServer());
 
         frame.addWindowListener(new WindowAdapter() {
@@ -115,10 +127,8 @@ public final class WindowsLauncher {
 
         String nvidiaKey = new String(nvidiaKeyField.getPassword()).trim();
         if (nvidiaKey.isBlank()) {
-            JOptionPane.showMessageDialog(frame,
-                    "Informe sua NVIDIA API Key. A mesma chave será usada para texto, áudio e Tool Calling.",
-                    "NVIDIA API Key necessária",
-                    JOptionPane.WARNING_MESSAGE);
+            showWarning("NVIDIA API Key necessária",
+                    "Informe sua NVIDIA API Key. A mesma chave será usada para texto, áudio e Tool Calling.");
             return;
         }
 
@@ -130,27 +140,14 @@ public final class WindowsLauncher {
 
     private void startServer(String nvidiaKey) {
         try {
-            Path imageRoot = Path.of(System.getProperty("java.home")).toAbsolutePath().getParent();
-            if (imageRoot == null) {
-                throw new IllegalStateException("Não foi possível localizar o runtime embutido.");
-            }
-
-            Path appJar = imageRoot.resolve("app").resolve("budget-ai.jar");
-            Path javaExe = Path.of(System.getProperty("java.home"), "bin", "java.exe");
-            if (!Files.isRegularFile(appJar)) {
-                throw new IllegalStateException("Aplicação Spring Boot não encontrada: " + appJar);
-            }
-            if (!Files.isRegularFile(javaExe)) {
-                throw new IllegalStateException("Java embutido não encontrado: " + javaExe);
-            }
-
+            RuntimePaths paths = resolveRuntimePaths();
             Path dataDir = resolveDataDir();
             Path logsDir = dataDir.resolve("logs");
             Files.createDirectories(logsDir);
             Files.createDirectories(dataDir.resolve("data"));
             logFile = logsDir.resolve("budget-ai.log");
 
-            ProcessBuilder builder = new ProcessBuilder(javaExe.toString(), "-jar", appJar.toString());
+            ProcessBuilder builder = new ProcessBuilder(paths.javaExe().toString(), "-jar", paths.appJar().toString());
             builder.directory(dataDir.toFile());
             builder.redirectErrorStream(true);
             builder.redirectOutput(ProcessBuilder.Redirect.appendTo(logFile.toFile()));
@@ -161,14 +158,15 @@ public final class WindowsLauncher {
             env.put("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com");
             env.remove("OPENAI_API_KEY");
 
-            serverProcess = builder.start();
             appendLauncherLog("Launcher iniciou o backend em " + LocalDateTime.now());
+            serverProcess = builder.start();
 
             if (!waitUntilReady(serverProcess, 75)) {
                 if (!serverProcess.isAlive()) {
-                    throw new IllegalStateException("O backend encerrou durante a inicialização. Consulte: " + logFile);
+                    throw new BackendStartupException(readStartupDiagnostic());
                 }
-                throw new IllegalStateException("O backend não respondeu em 75 segundos. Consulte: " + logFile);
+                throw new BackendStartupException(
+                        "O backend iniciou, mas não respondeu em 75 segundos. Verifique se a porta 8080 está livre.");
             }
 
             SwingUtilities.invokeLater(() -> {
@@ -181,40 +179,71 @@ public final class WindowsLauncher {
             openPanel();
 
             int exit = serverProcess.waitFor();
+            if (exit != 0) {
+                appendLauncherLog("Backend encerrou inesperadamente com código " + exit);
+            }
             SwingUtilities.invokeLater(() -> {
                 statusLabel.setText("Backend encerrado (código " + exit + ")");
                 resetStoppedState();
             });
+        } catch (BackendStartupException ex) {
+            reportFailure("Falha ao iniciar o backend", ex.getMessage(), ex);
+        } catch (IOException ex) {
+            reportFailure("Falha de leitura/gravação",
+                    "O Budget AI não conseguiu acessar os arquivos necessários.\n" + safeMessage(ex), ex);
+        } catch (SecurityException ex) {
+            reportFailure("Permissão negada",
+                    "O Windows bloqueou o acesso a um arquivo ou processo necessário.\n" + safeMessage(ex), ex);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            reportFailure("Inicialização interrompida", "A inicialização do backend foi interrompida.", ex);
         } catch (Exception ex) {
-            SwingUtilities.invokeLater(() -> {
-                statusLabel.setText("Falha ao iniciar");
-                resetStoppedState();
-                JOptionPane.showMessageDialog(frame,
-                        ex.getMessage() + (logFile == null ? "" : "\n\nLog: " + logFile),
-                        "Falha ao iniciar Budget AI",
-                        JOptionPane.ERROR_MESSAGE);
-            });
+            reportFailure("Erro inesperado no launcher",
+                    "O launcher encontrou um erro não previsto. Consulte o log para detalhes.\n" + safeMessage(ex), ex);
         }
+    }
+
+    private RuntimePaths resolveRuntimePaths() {
+        Path imageRoot = Path.of(System.getProperty("java.home")).toAbsolutePath().getParent();
+        if (imageRoot == null) {
+            throw new BackendStartupException("Não foi possível localizar o runtime Java embutido.");
+        }
+
+        Path appJar = imageRoot.resolve("app").resolve("budget-ai.jar");
+        Path javaExe = Path.of(System.getProperty("java.home"), "bin", "java.exe");
+        if (!Files.isRegularFile(appJar)) {
+            throw new BackendStartupException("Aplicação Spring Boot não encontrada: " + appJar);
+        }
+        if (!Files.isRegularFile(javaExe)) {
+            throw new BackendStartupException("Java 21 embutido não encontrado: " + javaExe);
+        }
+        return new RuntimePaths(appJar, javaExe);
     }
 
     private boolean waitUntilReady(Process process, int timeoutSeconds) {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds);
         while (System.nanoTime() < deadline && process.isAlive()) {
+            HttpURLConnection connection = null;
             try {
-                HttpURLConnection connection = (HttpURLConnection) new URL(HEALTH_URL).openConnection();
+                connection = (HttpURLConnection) new URL(HEALTH_URL).openConnection();
                 connection.setConnectTimeout(1000);
                 connection.setReadTimeout(1000);
                 connection.setRequestMethod("GET");
                 int code = connection.getResponseCode();
-                connection.disconnect();
                 if (code >= 200 && code < 500) {
                     return true;
                 }
-            } catch (Exception ignored) {
+            } catch (IOException ignored) {
+                // Durante o boot é normal a porta ainda não aceitar conexão.
+            } finally {
+                if (connection != null) {
+                    connection.disconnect();
+                }
             }
+
             try {
                 Thread.sleep(1000);
-            } catch (InterruptedException e) {
+            } catch (InterruptedException ex) {
                 Thread.currentThread().interrupt();
                 return false;
             }
@@ -222,16 +251,75 @@ public final class WindowsLauncher {
         return false;
     }
 
+    private String readStartupDiagnostic() {
+        if (logFile == null || !Files.isRegularFile(logFile)) {
+            return "O backend encerrou durante a inicialização e nenhum log foi encontrado.";
+        }
+
+        try {
+            List<String> lines = Files.readAllLines(logFile);
+            for (int i = lines.size() - 1; i >= 0; i--) {
+                String line = lines.get(i);
+                if (line.contains("OpenAI API key must be set")) {
+                    return "Configuração inválida do Spring AI: um módulo OpenAI não utilizado tentou iniciar sem credencial. Este build deveria manter esses módulos desativados.";
+                }
+                if (line.contains("Port 8080") && line.toLowerCase().contains("use")) {
+                    return "A porta 8080 já está sendo usada por outro programa. Feche o processo que usa a porta e tente novamente.";
+                }
+                if (line.contains("BindException") || line.contains("Address already in use")) {
+                    return "Não foi possível abrir a porta 8080 porque ela já está em uso.";
+                }
+                if (line.contains("Caused by:")) {
+                    return "O Spring Boot falhou ao iniciar. Motivo encontrado no log:\n" + trim(line, 700);
+                }
+            }
+            return "O backend encerrou durante a inicialização. Últimas linhas úteis:\n" + logTail(lines, 8);
+        } catch (IOException ex) {
+            return "O backend encerrou e o launcher não conseguiu ler o log: " + safeMessage(ex);
+        }
+    }
+
+    private String logTail(List<String> lines, int count) {
+        int start = Math.max(0, lines.size() - count);
+        StringBuilder out = new StringBuilder();
+        for (int i = start; i < lines.size(); i++) {
+            String line = lines.get(i).trim();
+            if (!line.isBlank()) {
+                if (!out.isEmpty()) out.append('\n');
+                out.append(trim(line, 300));
+            }
+        }
+        return out.toString();
+    }
+
+    private String trim(String value, int max) {
+        return value.length() <= max ? value : value.substring(0, max) + "...";
+    }
+
     private void openPanel() {
         try {
-            if (Desktop.isDesktopSupported()) {
-                Desktop.getDesktop().browse(URI.create(PANEL_URL));
+            if (!Desktop.isDesktopSupported()) {
+                throw new UnsupportedOperationException("Desktop API indisponível");
             }
+            Desktop.getDesktop().browse(URI.create(PANEL_URL));
         } catch (Exception ex) {
-            JOptionPane.showMessageDialog(frame,
-                    "Abra manualmente: " + PANEL_URL,
-                    "Painel Budget AI",
-                    JOptionPane.INFORMATION_MESSAGE);
+            showInfo("Painel Budget AI", "Não consegui abrir o navegador automaticamente.\nAbra manualmente: " + PANEL_URL);
+        }
+    }
+
+    private void openLog() {
+        try {
+            if (logFile == null || !Files.isRegularFile(logFile)) {
+                showInfo("Log Budget AI", "O arquivo de log ainda não existe.");
+                return;
+            }
+            if (!Desktop.isDesktopSupported()) {
+                showInfo("Log Budget AI", "Log: " + logFile);
+                return;
+            }
+            Desktop.getDesktop().open(logFile.toFile());
+        } catch (Exception ex) {
+            showError("Não foi possível abrir o log", "Log: " + logFile + "\n" + safeMessage(ex));
         }
     }
 
@@ -245,25 +333,21 @@ public final class WindowsLauncher {
                         "if($cmd){ & $cmd.Source } " +
                         "elseif(Test-Path $native){ & $native } " +
                         "else { " +
-                        "Write-Host 'Codex CLI não encontrado. Instalando pelo instalador oficial da OpenAI...' -ForegroundColor Cyan; " +
+                        "Write-Host 'Codex CLI não encontrado. Instalando pelo instalador oficial...' -ForegroundColor Cyan; " +
                         "irm https://chatgpt.com/codex/install.ps1 | iex; " +
                         "$cmd=Get-Command codex -ErrorAction SilentlyContinue; " +
                         "if($cmd){ & $cmd.Source } elseif(Test-Path $native){ & $native } " +
                         "else { throw 'Codex foi instalado, mas o executável não foi localizado.' } " +
                         "}";
 
-                new ProcessBuilder(
-                        "powershell.exe",
-                        "-NoExit",
-                        "-NoProfile",
-                        "-ExecutionPolicy", "Bypass",
-                        "-Command", command)
-                        .start();
+                new ProcessBuilder("powershell.exe", "-NoExit", "-NoProfile",
+                        "-ExecutionPolicy", "Bypass", "-Command", command).start();
+            } catch (IOException ex) {
+                SwingUtilities.invokeLater(() -> showError("Falha ao abrir Codex",
+                        "O PowerShell/Codex não pôde ser iniciado.\n" + safeMessage(ex)));
             } catch (Exception ex) {
-                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(frame,
-                        "Não foi possível abrir/instalar o Codex: " + ex.getMessage(),
-                        "Codex",
-                        JOptionPane.ERROR_MESSAGE));
+                SwingUtilities.invokeLater(() -> showError("Erro no Codex",
+                        "Não foi possível abrir ou instalar o Codex.\n" + safeMessage(ex)));
             }
         }, "codex-login");
         worker.setDaemon(true);
@@ -276,18 +360,33 @@ public final class WindowsLauncher {
             resetStoppedState();
             return;
         }
+
         statusLabel.setText("Encerrando backend...");
-        process.destroy();
         try {
+            process.destroy();
             if (!process.waitFor(5, TimeUnit.SECONDS)) {
                 process.destroyForcibly();
+                process.waitFor(3, TimeUnit.SECONDS);
             }
-        } catch (InterruptedException e) {
+        } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             process.destroyForcibly();
+            appendLauncherLog("Encerramento foi interrompido: " + safeMessage(ex));
+        } catch (Exception ex) {
+            appendLauncherLog("Falha ao encerrar backend: " + safeMessage(ex));
+        } finally {
+            resetStoppedState();
+            statusLabel.setText("Parado");
         }
-        resetStoppedState();
-        statusLabel.setText("Parado");
+    }
+
+    private void reportFailure(String title, String message, Throwable ex) {
+        appendLauncherLog(title + ": " + safeMessage(ex));
+        SwingUtilities.invokeLater(() -> {
+            statusLabel.setText("Falha ao iniciar");
+            resetStoppedState();
+            showError(title, message + (logFile == null ? "" : "\n\nLog: " + logFile));
+        });
     }
 
     private void setStartingState() {
@@ -306,7 +405,7 @@ public final class WindowsLauncher {
         nvidiaKeyField.setEnabled(true);
     }
 
-    private Path resolveDataDir() throws Exception {
+    private Path resolveDataDir() throws IOException {
         String localAppData = System.getenv("LOCALAPPDATA");
         Path dir = localAppData != null && !localAppData.isBlank()
                 ? Path.of(localAppData, "BudgetAI")
@@ -316,14 +415,40 @@ public final class WindowsLauncher {
     }
 
     private void appendLauncherLog(String line) {
-        if (logFile == null) {
-            return;
-        }
+        if (logFile == null) return;
         try {
-            Files.writeString(logFile, System.lineSeparator() + line + System.lineSeparator(),
-                    java.nio.file.StandardOpenOption.CREATE,
-                    java.nio.file.StandardOpenOption.APPEND);
-        } catch (Exception ignored) {
+            Files.createDirectories(logFile.getParent());
+            Files.writeString(logFile, System.lineSeparator() + "[Launcher] " + line + System.lineSeparator(),
+                    StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+        } catch (IOException ex) {
+            System.err.println("Falha ao gravar log do launcher: " + ex.getMessage());
+        }
+    }
+
+    private String safeMessage(Throwable ex) {
+        if (ex == null || ex.getMessage() == null || ex.getMessage().isBlank()) {
+            return ex == null ? "erro desconhecido" : ex.getClass().getSimpleName();
+        }
+        return ex.getMessage();
+    }
+
+    private void showError(String title, String message) {
+        JOptionPane.showMessageDialog(frame, message, title, JOptionPane.ERROR_MESSAGE);
+    }
+
+    private void showWarning(String title, String message) {
+        JOptionPane.showMessageDialog(frame, message, title, JOptionPane.WARNING_MESSAGE);
+    }
+
+    private void showInfo(String title, String message) {
+        JOptionPane.showMessageDialog(frame, message, title, JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private record RuntimePaths(Path appJar, Path javaExe) {}
+
+    private static final class BackendStartupException extends RuntimeException {
+        private BackendStartupException(String message) {
+            super(message);
         }
     }
 }
