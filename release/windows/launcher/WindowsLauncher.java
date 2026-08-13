@@ -17,7 +17,6 @@ import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.io.File;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
@@ -30,11 +29,10 @@ import java.util.concurrent.TimeUnit;
 public final class WindowsLauncher {
     private static final String PANEL_URL = "http://127.0.0.1:8080";
     private static final String HEALTH_URL = PANEL_URL + "/api/system/ai-provider";
-    private static final String DEFAULT_MODEL = "z-ai/glm-5.2";
+    private static final String DEFAULT_MODEL = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning";
 
     private final JFrame frame = new JFrame("Budget AI - DIO Spring AI");
     private final JPasswordField nvidiaKeyField = new JPasswordField();
-    private final JPasswordField openAiKeyField = new JPasswordField();
     private final JTextField modelField = new JTextField(DEFAULT_MODEL);
     private final JLabel statusLabel = new JLabel("Parado");
     private final JButton startButton = new JButton("Iniciar Budget AI");
@@ -60,30 +58,21 @@ public final class WindowsLauncher {
         if (envNvidia != null && !envNvidia.isBlank()) {
             nvidiaKeyField.setText(envNvidia);
         }
-        String envOpenAi = System.getenv("OPENAI_API_KEY");
-        if (envOpenAi != null && !envOpenAi.isBlank()) {
-            openAiKeyField.setText(envOpenAi);
-        }
-        String envModel = System.getenv("NVIDIA_MODEL");
-        if (envModel != null && !envModel.isBlank()) {
-            modelField.setText(envModel);
-        }
+        modelField.setEditable(false);
     }
 
     private void show() {
         frame.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
-        frame.setMinimumSize(new Dimension(620, 360));
+        frame.setMinimumSize(new Dimension(760, 330));
         frame.setLocationRelativeTo(null);
 
         JPanel form = new JPanel(new GridLayout(0, 1, 8, 8));
         form.setBorder(BorderFactory.createEmptyBorder(18, 18, 8, 18));
-        form.add(new JLabel("NVIDIA NIM API Key"));
+        form.add(new JLabel("NVIDIA NIM API Key - usada para texto, áudio e Tool Calling"));
         form.add(nvidiaKeyField);
-        form.add(new JLabel("Modelo NVIDIA"));
+        form.add(new JLabel("Modelo NVIDIA Omni (fixo)"));
         form.add(modelField);
-        form.add(new JLabel("OpenAI API Key para transcrição de áudio (opcional)"));
-        form.add(openAiKeyField);
-        form.add(new JLabel("As chaves ficam somente na memória durante esta execução e não são gravadas pelo launcher."));
+        form.add(new JLabel("Uma única credencial NVIDIA. O launcher não grava a chave em arquivo."));
 
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 10));
         openButton.setEnabled(false);
@@ -103,7 +92,7 @@ public final class WindowsLauncher {
 
         startButton.addActionListener(e -> startAsync());
         openButton.addActionListener(e -> openPanel());
-        codexButton.addActionListener(e -> launchCodexLogin());
+        codexButton.addActionListener(e -> launchCodex());
         stopButton.addActionListener(e -> stopServer());
 
         frame.addWindowListener(new WindowAdapter() {
@@ -125,29 +114,21 @@ public final class WindowsLauncher {
         }
 
         String nvidiaKey = new String(nvidiaKeyField.getPassword()).trim();
-        String openAiKey = new String(openAiKeyField.getPassword()).trim();
-        String model = modelField.getText().trim();
-
         if (nvidiaKey.isBlank()) {
             JOptionPane.showMessageDialog(frame,
-                    "Informe sua NVIDIA API Key para usar o chat e o Tool Calling.",
+                    "Informe sua NVIDIA API Key. A mesma chave será usada para texto, áudio e Tool Calling.",
                     "NVIDIA API Key necessária",
                     JOptionPane.WARNING_MESSAGE);
             return;
         }
-        if (model.isBlank()) {
-            model = DEFAULT_MODEL;
-            modelField.setText(model);
-        }
 
-        final String selectedModel = model;
         setStartingState();
-        Thread worker = new Thread(() -> startServer(nvidiaKey, openAiKey, selectedModel), "budget-ai-starter");
+        Thread worker = new Thread(() -> startServer(nvidiaKey), "budget-ai-starter");
         worker.setDaemon(true);
         worker.start();
     }
 
-    private void startServer(String nvidiaKey, String openAiKey, String model) {
+    private void startServer(String nvidiaKey) {
         try {
             Path imageRoot = Path.of(System.getProperty("java.home")).toAbsolutePath().getParent();
             if (imageRoot == null) {
@@ -176,13 +157,9 @@ public final class WindowsLauncher {
 
             Map<String, String> env = builder.environment();
             env.put("NVIDIA_API_KEY", nvidiaKey);
-            env.put("NVIDIA_MODEL", model);
+            env.put("NVIDIA_MODEL", DEFAULT_MODEL);
             env.put("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com");
-            if (!openAiKey.isBlank()) {
-                env.put("OPENAI_API_KEY", openAiKey);
-            } else {
-                env.remove("OPENAI_API_KEY");
-            }
+            env.remove("OPENAI_API_KEY");
 
             serverProcess = builder.start();
             appendLauncherLog("Launcher iniciou o backend em " + LocalDateTime.now());
@@ -195,13 +172,11 @@ public final class WindowsLauncher {
             }
 
             SwingUtilities.invokeLater(() -> {
-                statusLabel.setText("Rodando • NVIDIA NIM • " + model + " • " + PANEL_URL);
+                statusLabel.setText("Rodando • NVIDIA Omni • texto + áudio + tools • " + PANEL_URL);
                 startButton.setEnabled(false);
                 openButton.setEnabled(true);
                 stopButton.setEnabled(true);
                 nvidiaKeyField.setEnabled(false);
-                openAiKeyField.setEnabled(false);
-                modelField.setEnabled(false);
             });
             openPanel();
 
@@ -260,26 +235,34 @@ public final class WindowsLauncher {
         }
     }
 
-    private void launchCodexLogin() {
+    private void launchCodex() {
         Thread worker = new Thread(() -> {
             try {
-                Process check = new ProcessBuilder("cmd.exe", "/c", "where codex")
-                        .redirectErrorStream(true)
-                        .start();
-                boolean finished = check.waitFor(8, TimeUnit.SECONDS);
-                if (!finished || check.exitValue() != 0) {
-                    SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(frame,
-                            "Codex CLI não foi encontrado.\n\nInstale com:\nnpm install -g @openai/codex\n\nDepois clique novamente em Login Codex.",
-                            "Codex CLI",
-                            JOptionPane.INFORMATION_MESSAGE));
-                    return;
-                }
+                String command =
+                        "$ErrorActionPreference='Stop'; " +
+                        "$native=Join-Path $env:LOCALAPPDATA 'Programs\\OpenAI\\Codex\\bin\\codex.exe'; " +
+                        "$cmd=Get-Command codex -ErrorAction SilentlyContinue; " +
+                        "if($cmd){ & $cmd.Source } " +
+                        "elseif(Test-Path $native){ & $native } " +
+                        "else { " +
+                        "Write-Host 'Codex CLI não encontrado. Instalando pelo instalador oficial da OpenAI...' -ForegroundColor Cyan; " +
+                        "irm https://chatgpt.com/codex/install.ps1 | iex; " +
+                        "$cmd=Get-Command codex -ErrorAction SilentlyContinue; " +
+                        "if($cmd){ & $cmd.Source } elseif(Test-Path $native){ & $native } " +
+                        "else { throw 'Codex foi instalado, mas o executável não foi localizado.' } " +
+                        "}";
 
-                new ProcessBuilder("cmd.exe", "/c", "start \"Codex Login\" cmd.exe /k codex --login").start();
+                new ProcessBuilder(
+                        "powershell.exe",
+                        "-NoExit",
+                        "-NoProfile",
+                        "-ExecutionPolicy", "Bypass",
+                        "-Command", command)
+                        .start();
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(frame,
-                        "Não foi possível abrir o login do Codex: " + ex.getMessage(),
-                        "Codex CLI",
+                        "Não foi possível abrir/instalar o Codex: " + ex.getMessage(),
+                        "Codex",
                         JOptionPane.ERROR_MESSAGE));
             }
         }, "codex-login");
@@ -313,8 +296,6 @@ public final class WindowsLauncher {
         openButton.setEnabled(false);
         stopButton.setEnabled(false);
         nvidiaKeyField.setEnabled(false);
-        openAiKeyField.setEnabled(false);
-        modelField.setEnabled(false);
     }
 
     private void resetStoppedState() {
@@ -323,18 +304,13 @@ public final class WindowsLauncher {
         openButton.setEnabled(false);
         stopButton.setEnabled(false);
         nvidiaKeyField.setEnabled(true);
-        openAiKeyField.setEnabled(true);
-        modelField.setEnabled(true);
     }
 
     private Path resolveDataDir() throws Exception {
         String localAppData = System.getenv("LOCALAPPDATA");
-        Path dir;
-        if (localAppData != null && !localAppData.isBlank()) {
-            dir = Path.of(localAppData, "BudgetAI");
-        } else {
-            dir = Path.of(System.getProperty("user.home"), ".budgetai");
-        }
+        Path dir = localAppData != null && !localAppData.isBlank()
+                ? Path.of(localAppData, "BudgetAI")
+                : Path.of(System.getProperty("user.home"), ".budgetai");
         Files.createDirectories(dir);
         return dir;
     }
