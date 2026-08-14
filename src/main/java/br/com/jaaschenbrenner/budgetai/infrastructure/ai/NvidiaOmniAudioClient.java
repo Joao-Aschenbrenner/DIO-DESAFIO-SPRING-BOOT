@@ -220,7 +220,10 @@ public class NvidiaOmniAudioClient {
      * A NVIDIA Cloud Functions Asset API responde em snake_case (asset_id/upload_url),
      * então a desserialização precisa do mapeamento explícito. O record fica com
      * visibilidade de pacote para o teste de deserialização.
+     * @JsonIgnoreProperties garante compatibilidade quando o JSON traz também
+     * campos camelCase (assetId, uploadUrl) ao lado dos snake_case.
      */
+    @JsonIgnoreProperties(ignoreUnknown = true)
     record AssetResponse(
             @JsonProperty("asset_id") String assetId,
             @JsonProperty("upload_url") String uploadUrl) {
