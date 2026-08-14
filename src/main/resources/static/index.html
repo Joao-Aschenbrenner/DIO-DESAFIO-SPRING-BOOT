@@ -1,29 +1,508 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Budget AI - DIO Spring AI</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Budget AI · Painel Financeiro — DIO Spring AI</title>
 <link rel="icon" type="image/svg+xml" href="/logo.svg">
 <style>
-body{font-family:system-ui,Arial;margin:0;background:#0d1117;color:#e6edf3}main{max-width:1050px;margin:auto;padding:30px 18px}.brand{display:flex;align-items:center;gap:16px}.brand img{width:74px;height:74px}.brand h1{margin:0}.muted{color:#8b949e}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-top:22px}.card{background:#161b22;border:1px solid #30363d;border-radius:14px;padding:18px}input,select,textarea,button{width:100%;box-sizing:border-box;margin-top:8px;padding:10px;border-radius:8px;border:1px solid #30363d;background:#0d1117;color:#e6edf3}button{background:#238636;cursor:pointer;font-weight:700}pre{white-space:pre-wrap;word-break:break-word;background:#0d1117;padding:12px;border-radius:8px;min-height:42px}pre.error{border:1px solid #f85149;color:#ffb4ad}label{display:block;margin-top:10px;font-size:13px}
+:root{
+  --bg:#070a0e;
+  --panel:#0f151d;
+  --panel-2:#0b1119;
+  --border:#1e2833;
+  --border-soft:#17202b;
+  --text:#e8eef5;
+  --muted:#8b98a7;
+  --green:#57e389;
+  --green-strong:#3ecf72;
+  --cyan:#31c6f4;
+  --red:#f85149;
+  --amber:#d29922;
+  --radius:16px;
+  --mono:"Cascadia Code","Consolas",ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;
+  font-family:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;
+  background:
+    radial-gradient(900px 420px at 12% -8%,rgba(87,227,137,.10),transparent 60%),
+    radial-gradient(900px 420px at 88% -8%,rgba(49,198,244,.10),transparent 60%),
+    linear-gradient(180deg,#0a0e14 0%,var(--bg) 100%);
+  background-attachment:fixed;
+  color:var(--text);
+  line-height:1.55;
+  min-height:100vh;
+}
+.wrap{max-width:1100px;margin:0 auto;padding:36px 22px 56px}
+.muted{color:var(--muted)}
+.grad{
+  background:linear-gradient(90deg,var(--green),var(--cyan));
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent;
+}
+
+/* ===== Cabeçalho ===== */
+.top{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:26px}
+.brand{display:flex;align-items:center;gap:22px}
+.logo{
+  width:120px;height:120px;flex:0 0 auto;
+  filter:drop-shadow(0 6px 22px rgba(87,227,137,.28));
+}
+.brand h1{margin:0;font-size:clamp(30px,4.4vw,42px);font-weight:800;letter-spacing:-.5px}
+.brand p{margin:4px 0 0;font-size:15px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.chip{
+  font-size:11.5px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;
+  color:#bfe9d2;background:rgba(87,227,137,.08);
+  border:1px solid rgba(87,227,137,.25);
+  border-radius:999px;padding:4px 12px;
+}
+.badge{
+  display:flex;align-items:center;gap:12px;
+  background:linear-gradient(180deg,#121a24,#0d141d);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:12px 18px;
+  box-shadow:0 8px 24px rgba(0,0,0,.35);
+}
+.badge .dot{width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(87,227,137,.55);animation:pulse 2s infinite}
+@keyframes pulse{
+  0%{box-shadow:0 0 0 0 rgba(87,227,137,.55)}
+  70%{box-shadow:0 0 0 9px rgba(87,227,137,0)}
+  100%{box-shadow:0 0 0 0 rgba(87,227,137,0)}
+}
+.badge strong{display:block;font-size:14.5px;letter-spacing:.6px}
+.badge small{color:var(--muted);font-size:12px}
+
+/* ===== Cards ===== */
+.card{
+  background:linear-gradient(180deg,var(--panel),var(--panel-2));
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:22px;
+  margin-bottom:18px;
+  box-shadow:0 10px 30px rgba(0,0,0,.35);
+}
+.card-head{display:flex;align-items:flex-start;gap:14px;margin-bottom:14px}
+.icon{
+  flex:0 0 auto;width:40px;height:40px;border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,rgba(87,227,137,.16),rgba(49,198,244,.14));
+  border:1px solid rgba(87,227,137,.3);color:var(--green);
+}
+.card-head h2{margin:0;font-size:17px;font-weight:700}
+.card-head p{margin:2px 0 0;font-size:13px}
+
+/* ===== Hero ===== */
+.hero{display:flex;gap:26px;justify-content:space-between;align-items:stretch;flex-wrap:wrap}
+.hero-copy{flex:1 1 320px}
+.hero-copy h2{margin:0;font-size:clamp(20px,3vw,26px);font-weight:800}
+.hero-copy p{margin:8px 0 0;max-width:52ch}
+.provider-box{flex:1 1 320px;display:flex;flex-direction:column;gap:10px}
+.provider-label{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+.provider-label .pulse{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+
+/* ===== Destaque IA ===== */
+.card-ai{
+  position:relative;
+  border:1px solid rgba(87,227,137,.35);
+  background:
+    radial-gradient(560px 220px at 90% -20%,rgba(49,198,244,.10),transparent 60%),
+    linear-gradient(180deg,#101b22,#0c141b);
+}
+.card-ai::before{
+  content:"";position:absolute;inset:0;border-radius:var(--radius);
+  background:linear-gradient(120deg,rgba(87,227,137,.12),transparent 40%,rgba(49,198,244,.12));
+  pointer-events:none;
+}
+.tag{
+  margin-left:auto;flex:0 0 auto;font-size:11px;font-weight:800;letter-spacing:.8px;
+  border-radius:999px;padding:5px 12px;
+}
+.tag-ai{color:#04160b;background:linear-gradient(90deg,var(--green),var(--cyan))}
+
+/* ===== Formulários ===== */
+label{display:block;margin-top:12px;font-size:12.5px;font-weight:600;color:#c6d2de}
+label:first-of-type{margin-top:0}
+input,select,textarea{
+  width:100%;box-sizing:border-box;
+  margin-top:6px;padding:11px 12px;
+  border-radius:10px;border:1px solid var(--border-soft);
+  background:#0a1017;color:var(--text);
+  font:inherit;font-size:14px;
+  transition:border-color .15s,box-shadow .15s;
+}
+textarea{resize:vertical;min-height:96px;line-height:1.5}
+input:focus,select:focus,textarea:focus{
+  outline:none;border-color:var(--green-strong);
+  box-shadow:0 0 0 3px rgba(87,227,137,.15);
+}
+select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 18px) 55%,calc(100% - 13px) 55%;background-size:5px 5px;background-repeat:no-repeat;cursor:pointer}
+.row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:14px}
+.hint{font-size:12.5px}
+
+/* ===== Botões ===== */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  width:auto;margin-top:0;padding:11px 20px;
+  border:1px solid transparent;border-radius:10px;
+  font:inherit;font-size:14px;font-weight:700;letter-spacing:.2px;
+  cursor:pointer;transition:transform .12s,box-shadow .15s,background .15s,opacity .15s;
+}
+.btn:active{transform:translateY(0) scale(.99)}
+.btn-primary{
+  background:linear-gradient(135deg,var(--green-strong),#25a35a);
+  color:#05130a;
+}
+.btn-primary:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 8px 20px rgba(87,227,137,.3)}
+.btn-ghost{
+  background:transparent;border-color:var(--border);color:#c6d2de;
+  width:auto;
+}
+.btn-ghost:hover:not(:disabled){border-color:var(--green-strong);color:var(--green);background:rgba(87,227,137,.06)}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
+
+/* ===== Saídas ===== */
+pre,.output{
+  font-family:var(--mono);font-size:12.5px;
+  white-space:pre-wrap;word-break:break-word;
+  background:#0a1017;border:1px solid var(--border-soft);
+  border-radius:10px;padding:12px;margin:12px 0 0;
+  min-height:44px;color:var(--text);
+  transition:border-color .15s;
+}
+pre.error,.output.error{border-color:var(--red);color:#ffb4ad;background:rgba(248,81,73,.05)}
+pre.ok,.output.ok{border-color:rgba(87,227,137,.35)}
+.empty{margin:0;font-size:13px}
+pre:empty::before,.output:empty::before{content:"Aguardando…";color:var(--muted)}
+
+/* ===== Estatísticas ===== */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.stat{
+  background:#0a1017;border:1px solid var(--border-soft);border-radius:10px;
+  padding:10px 12px;text-align:center;
+}
+.stat small{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.stat strong{font-size:15px;color:var(--green)}
+
+/* ===== Tabela de transações ===== */
+.table-wrap{overflow-x:auto;margin-top:12px;border:1px solid var(--border-soft);border-radius:10px}
+table{border-collapse:collapse;width:100%;min-width:420px;font-size:13px}
+th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--border-soft);white-space:nowrap}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);background:#0c131c}
+tr:last-child td{border-bottom:none}
+tbody tr:hover{background:rgba(87,227,137,.04)}
+.cat{
+  display:inline-block;font-size:11.5px;font-weight:600;
+  background:rgba(49,198,244,.1);border:1px solid rgba(49,198,244,.3);color:#9fdcf5;
+  border-radius:999px;padding:2px 10px;
+}
+
+/* ===== Drop zone de áudio ===== */
+.drop-zone{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+  border:2px dashed var(--border);border-radius:14px;
+  padding:26px 16px;text-align:center;cursor:pointer;
+  background:rgba(10,16,23,.5);
+  transition:border-color .15s,background .15s,transform .15s;
+}
+.drop-zone svg{width:34px;height:34px;color:var(--green);margin-bottom:4px}
+.drop-zone strong{font-size:14.5px}
+.drop-zone:hover,.drop-zone.dragover{border-color:var(--green-strong);background:rgba(87,227,137,.07)}
+.drop-zone.dragover{transform:scale(1.01)}
+.drop-zone input[type=file]{
+  position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;clip:rect(0 0 0 0);
+}
+.file-name{margin-top:4px;font-size:12.5px;color:var(--green)}
+
+/* ===== Rodapé ===== */
+.foot{text-align:center;font-size:12.5px;margin-top:26px}
+
+/* ===== Responsivo ===== */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px}
+.grid .card{margin-bottom:0}
+@media (max-width:920px){
+  .hero{flex-direction:column}
+  .wrap{padding:24px 16px 44px}
+}
+@media (max-width:600px){
+  .top{flex-direction:column;align-items:flex-start}
+  .logo{width:88px;height:88px}
+  .card{padding:16px}
+  .row .btn{width:100%}
+  .stats{grid-template-columns:1fr}
+  .card-head{flex-wrap:wrap}
+  .tag{margin-left:0}
+}
 </style>
-</head><body><main>
-<div class="brand"><img src="/logo.svg" alt="Logo Budget AI"><div><h1>Budget AI</h1><div class="muted">DIO Spring Boot + Spring AI • NVIDIA Nemotron Omni • texto + áudio + Tool Calling</div></div></div>
-<div class="grid">
-<section class="card"><h2>Provedor</h2><div class="muted">Uma única NVIDIA_API_KEY e o mesmo modelo para chat, tools e transcrição.</div><button onclick="loadProvider()">Atualizar status</button><pre id="provider">Carregando...</pre></section>
-<section class="card"><h2>Comando por texto</h2><textarea id="command" rows="4">Registre uma despesa de 42 reais com mercado.</textarea><button onclick="sendCommand()">Enviar para a IA</button><pre id="commandResult"></pre></section>
-<section class="card"><h2>Nova transação manual</h2><label>Descrição</label><input id="description" value="Café"><label>Valor em centavos</label><input id="amount" type="number" value="1250"><label>Categoria</label><select id="category"><option value="ALIMENTACAO">Alimentação</option><option value="TRANSPORTE">Transporte</option><option value="SAUDE">Saúde</option><option value="LAZER">Lazer</option><option value="MORADIA">Moradia</option><option value="EDUCACAO">Educação</option><option value="OUTROS">Outros</option></select><button onclick="createTransaction()">Salvar</button><pre id="createResult"></pre></section>
-<section class="card"><h2>Transações</h2><button onclick="listTransactions()">Atualizar lista</button><pre id="transactions"></pre></section>
-<section class="card"><h2>Comando por áudio</h2><div class="muted">Envie WAV ou MP3. O próprio NVIDIA Nemotron Omni transcreve e o ChatClient executa as tools financeiras.</div><input id="audio" type="file" accept=".wav,.mp3,audio/wav,audio/mpeg"><button onclick="sendAudio()">Transcrever e executar</button><pre id="audioResult"></pre></section>
-</div>
+</head>
+<body>
+<main class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <img class="logo" src="/logo.svg" alt="Logo Budget AI" width="120" height="120">
+      <div class="brand-text">
+        <h1>Budget <span class="grad">AI</span></h1>
+        <p class="muted">Assistente financeiro com IA · DIO Spring Boot + Spring AI</p>
+        <div class="chips">
+          <span class="chip">Texto</span>
+          <span class="chip">Transações</span>
+          <span class="chip">Áudio</span>
+          <span class="chip">Tool Calling</span>
+        </div>
+      </div>
+    </div>
+    <div class="badge">
+      <span class="dot"></span>
+      <div>
+        <strong>NVIDIA</strong>
+        <small>Nemotron Omni</small>
+      </div>
+    </div>
+  </header>
+
+  <section class="card hero">
+    <div class="hero-copy">
+      <h2>Painel financeiro</h2>
+      <p class="muted">Registre despesas por texto ou áudio, acompanhe suas transações e deixe a IA executar as ferramentas financeiras por você — tudo com o mesmo modelo NVIDIA.</p>
+    </div>
+    <div class="provider-box">
+      <div class="provider-label"><span class="pulse"></span>Status do provedor</div>
+      <pre id="provider">Carregando…</pre>
+      <div><button class="btn btn-ghost" id="loadProviderBtn" onclick="loadProvider()">Atualizar status</button></div>
+    </div>
+  </section>
+
+  <section class="card card-ai">
+    <div class="card-head">
+      <span class="icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg>
+      </span>
+      <div>
+        <h2>Comando por texto</h2>
+        <p class="muted">Escreva o que deseja em linguagem natural. A IA interpreta e executa as tools financeiras.</p>
+      </div>
+      <span class="tag tag-ai">IA</span>
+    </div>
+    <textarea id="command" rows="4" placeholder="Ex.: Registre uma despesa de 42 reais com mercado.">Registre uma despesa de 42 reais com mercado.</textarea>
+    <div class="row">
+      <button class="btn btn-primary" id="sendCommandBtn" onclick="sendCommand()">Enviar para a IA</button>
+      <span class="hint muted">Ex.: “Registre uma despesa de 42 reais com mercado.”</span>
+    </div>
+    <pre id="commandResult"></pre>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <div class="card-head">
+        <span class="icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/></svg>
+        </span>
+        <div>
+          <h2>Nova transação manual</h2>
+          <p class="muted">Cadastro direto, sem passar pela IA.</p>
+        </div>
+      </div>
+      <label for="description">Descrição</label>
+      <input id="description" value="Café" placeholder="Ex.: Almoço no restaurante">
+      <label for="amount">Valor em centavos</label>
+      <input id="amount" type="number" value="1250" placeholder="Ex.: 1250 = R$ 12,50">
+      <label for="category">Categoria</label>
+      <select id="category">
+        <option value="ALIMENTACAO">Alimentação</option>
+        <option value="TRANSPORTE">Transporte</option>
+        <option value="SAUDE">Saúde</option>
+        <option value="LAZER">Lazer</option>
+        <option value="MORADIA">Moradia</option>
+        <option value="EDUCACAO">Educação</option>
+        <option value="OUTROS">Outros</option>
+      </select>
+      <div class="row"><button class="btn btn-primary" id="createBtn" onclick="createTransaction()">Salvar transação</button></div>
+      <pre id="createResult"></pre>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <span class="icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+        </span>
+        <div>
+          <h2>Transações</h2>
+          <p class="muted">Histórico completo do controle financeiro.</p>
+        </div>
+      </div>
+      <div class="stats">
+        <div class="stat"><small>Registros</small><strong id="statCount">—</strong></div>
+        <div class="stat"><small>Total</small><strong id="statTotal">—</strong></div>
+        <div class="stat"><small>Categorias</small><strong id="statCategories">—</strong></div>
+      </div>
+      <button class="btn btn-ghost" id="listBtn" onclick="listTransactions()">Atualizar lista</button>
+      <div id="transactions" class="output"><p class="empty muted">Nenhuma transação carregada ainda.</p></div>
+    </section>
+  </div>
+
+  <section class="card">
+    <div class="card-head">
+      <span class="icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5M8 22h8"/></svg>
+      </span>
+      <div>
+        <h2>Comando por áudio</h2>
+        <p class="muted">Envie um WAV ou MP3. O próprio NVIDIA Nemotron Omni transcreve e o ChatClient executa as tools financeiras.</p>
+      </div>
+    </div>
+    <label class="drop-zone" id="dropZone">
+      <input id="audio" type="file" accept=".wav,.mp3,audio/wav,audio/mpeg">
+      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>
+      <strong>Arraste o áudio aqui</strong>
+      <span class="muted">ou clique para escolher um arquivo WAV ou MP3</span>
+      <span id="audioFileName" class="file-name"></span>
+    </label>
+    <div class="row">
+      <button class="btn btn-primary" id="audioBtn" onclick="sendAudio()">Transcrever e executar</button>
+      <span class="hint muted">Formatos aceitos: WAV, MP3</span>
+    </div>
+    <pre id="audioResult"></pre>
+  </section>
+
+  <footer class="foot muted">Budget AI · painel demonstrativo do desafio DIO Spring Boot + Spring AI</footer>
+</main>
+
 <script>
-async function jf(u,o={}){const r=await fetch(u,o),t=await r.text();let b;try{b=JSON.parse(t)}catch{b=t}if(!r.ok){const e=new Error(typeof b==='string'?b:(b.message||'Falha na requisição'));e.payload=b;e.status=r.status;throw e}return b}
-function sh(i,v,isError=false){const el=document.getElementById(i);el.classList.toggle('error',isError);el.textContent=typeof v==='string'?v:JSON.stringify(v,null,2)}
-function err(i,e){const p=e.payload;if(p&&typeof p==='object'){let m=`${p.code||'ERROR'}: ${p.message||e.message}`;if(p.correlationId)m+=`\nCorrelação: ${p.correlationId}`;if(Array.isArray(p.details)&&p.details.length)m+=`\n${p.details.join('\n')}`;sh(i,m,true)}else sh(i,e.message||String(e),true)}
-async function loadProvider(){try{sh('provider',await jf('/api/system/ai-provider'))}catch(e){err('provider',e)}}
-async function sendCommand(){sh('commandResult','Processando...');try{const x=await jf('/api/ai/command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:document.getElementById('command').value})});sh('commandResult',x);await listTransactions()}catch(e){err('commandResult',e)}}
-async function createTransaction(){try{const x=await jf('/api/transactions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({description:document.getElementById('description').value,amountInCents:Number(document.getElementById('amount').value),category:document.getElementById('category').value})});sh('createResult',x);await listTransactions()}catch(e){err('createResult',e)}}
-async function listTransactions(){try{sh('transactions',await jf('/api/transactions'))}catch(e){err('transactions',e)}}
-async function sendAudio(){const f=document.getElementById('audio').files[0];if(!f){sh('audioResult','Escolha um WAV ou MP3.',true);return}const fd=new FormData();fd.append('file',f);sh('audioResult','Processando áudio na NVIDIA...');try{const x=await jf('/api/ai/voice-command',{method:'POST',body:fd});sh('audioResult',x);await listTransactions()}catch(e){err('audioResult',e)}}
+var CATEGORY_LABELS={ALIMENTACAO:'Alimentação',TRANSPORTE:'Transporte',SAUDE:'Saúde',LAZER:'Lazer',MORADIA:'Moradia',EDUCACAO:'Educação',OUTROS:'Outros'};
+
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function fmtCents(v){var n=Number(v);if(!isFinite(n))return v==null?'':String(v);return (n/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
+function fmtDate(v){
+  if(v==null)return '';
+  var d=new Date(v);
+  if(isNaN(d.getTime()))return String(v);
+  return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})
+}
+function setText(id,v){var el=document.getElementById(id);if(el)el.textContent=v}
+
+async function jf(u,o){o=o||{};var r=await fetch(u,o),t=await r.text();var b;try{b=JSON.parse(t)}catch(e){b=t}if(!r.ok){var e=new Error(typeof b==='string'?b:(b.message||'Falha na requisição'));e.payload=b;e.status=r.status;throw e}return b}
+
+function sh(i,v,isError){isError=!!isError;var el=document.getElementById(i);if(!el)return;el.classList.toggle('error',isError);el.classList.toggle('ok',!isError);el.textContent=(typeof v==='string')?v:JSON.stringify(v,null,2)}
+
+function err(i,e){var p=e.payload;if(p&&typeof p==='object'){var m=(p.code||'ERROR')+': '+(p.message||e.message);if(p.correlationId)m+='\nCorrelação: '+p.correlationId;if(Array.isArray(p.details)&&p.details.length)m+='\n'+p.details.join('\n');sh(i,m,true)}else sh(i,e.message||String(e),true)}
+
+function setBusy(id,on){
+  var b=document.getElementById(id);if(!b)return;
+  if(on){if(!b.dataset.label)b.dataset.label=b.textContent;b.disabled=true;b.classList.add('busy');b.textContent='Processando…'}
+  else{b.disabled=false;b.classList.remove('busy');b.textContent=b.dataset.label||'OK'}
+}
+
+async function loadProvider(){
+  setBusy('loadProviderBtn',true);
+  try{sh('provider',await jf('/api/system/ai-provider'))}
+  catch(e){err('provider',e)}
+  finally{setBusy('loadProviderBtn',false)}
+}
+
+async function sendCommand(){
+  var txt=document.getElementById('command').value.trim();
+  if(!txt){sh('commandResult','Digite um comando antes de enviar.',true);return}
+  sh('commandResult','Processando seu comando na NVIDIA…');
+  setBusy('sendCommandBtn',true);
+  try{
+    var x=await jf('/api/ai/command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:txt})});
+    sh('commandResult',x);await listTransactions();
+  }catch(e){err('commandResult',e)}
+  finally{setBusy('sendCommandBtn',false)}
+}
+
+async function createTransaction(){
+  var desc=document.getElementById('description').value.trim();
+  var amt=Number(document.getElementById('amount').value);
+  if(!desc){sh('createResult','Informe uma descrição para a transação.',true);return}
+  if(!isFinite(amt)){sh('createResult','Informe um valor numérico em centavos.',true);return}
+  setBusy('createBtn',true);
+  try{
+    var x=await jf('/api/transactions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({description:desc,amountInCents:amt,category:document.getElementById('category').value})});
+    sh('createResult',x);await listTransactions();
+  }catch(e){err('createResult',e)}
+  finally{setBusy('createBtn',false)}
+}
+
+async function listTransactions(){
+  setBusy('listBtn',true);
+  try{var x=await jf('/api/transactions');renderTransactions(x)}
+  catch(e){err('transactions',e)}
+  finally{setBusy('listBtn',false)}
+}
+
+function renderTransactions(x){
+  if(!Array.isArray(x)){sh('transactions',x);return}
+  var el=document.getElementById('transactions');
+  el.classList.remove('error');el.classList.add('ok');
+  renderStats(x);
+  if(x.length===0){el.innerHTML='<p class="empty muted">Nenhuma transação cadastrada ainda. Use a IA ou o formulário manual.</p>';return}
+  var keys=[];
+  x.forEach(function(t){Object.keys(t||{}).forEach(function(k){if(keys.indexOf(k)===-1)keys.push(k)})});
+  var ordered=['id','description','amountInCents','category','createdAt','timestamp','date'];
+  keys.sort(function(a,b){var ia=ordered.indexOf(a),ib=ordered.indexOf(b);return (ia===-1?99:ia)-(ib===-1?99:ib)});
+  var html='<div class="table-wrap"><table><thead><tr>';
+  keys.forEach(function(k){html+='<th>'+esc(headerLabel(k))+'</th>'});
+  html+='</tr></thead><tbody>';
+  x.forEach(function(t){
+    html+='<tr>';
+    keys.forEach(function(k){html+='<td>'+cell(k,t[k])+'</td>'});
+    html+='</tr>';
+  });
+  html+='</tbody></table></div>';
+  el.innerHTML=html;
+}
+
+function headerLabel(k){return ({description:'Descrição',amountInCents:'Valor',category:'Categoria',createdAt:'Data',id:'ID',timestamp:'Data',date:'Data'})[k]||k}
+function cell(k,v){
+  if(v==null)return '<span class="muted">—</span>';
+  if(k==='amountInCents')return '<strong>'+esc(fmtCents(v))+'</strong>';
+  if(k==='category')return '<span class="cat">'+esc(CATEGORY_LABELS[v]||v)+'</span>';
+  if(k==='createdAt'||k==='timestamp'||k==='date')return esc(fmtDate(v));
+  return esc(v);
+}
+
+function renderStats(x){
+  var total=0,cats={};
+  x.forEach(function(t){if(t){total+=Number(t.amountInCents)||0;if(t.category)cats[t.category]=1}});
+  setText('statCount',String(x.length));
+  setText('statTotal',fmtCents(total));
+  setText('statCategories',String(Object.keys(cats).length));
+}
+
+/* ---- Áudio: drop area mantém o input funcional ---- */
+var audioInput=document.getElementById('audio');
+var dropZone=document.getElementById('dropZone');
+function showAudioFile(n){var el=document.getElementById('audioFileName');if(el)el.textContent=n?('Selecionado: '+n):''}
+audioInput.addEventListener('change',function(){showAudioFile(audioInput.files&&audioInput.files[0]?audioInput.files[0].name:'')});
+['dragenter','dragover'].forEach(function(t){dropZone.addEventListener(t,function(e){e.preventDefault();dropZone.classList.add('dragover')})});
+['dragleave','drop'].forEach(function(t){dropZone.addEventListener(t,function(e){e.preventDefault();dropZone.classList.remove('dragover')})});
+dropZone.addEventListener('drop',function(e){
+  var fs=e.dataTransfer&&e.dataTransfer.files;
+  if(!fs||!fs.length)return;
+  try{var dt=new DataTransfer();dt.items.add(fs[0]);audioInput.files=dt.files;showAudioFile(fs[0].name)}catch(_){}
+});
+
+async function sendAudio(){
+  var f=audioInput.files[0];
+  if(!f){sh('audioResult','Escolha um WAV ou MP3 antes de enviar.',true);return}
+  var fd=new FormData();fd.append('file',f);
+  sh('audioResult','Processando áudio na NVIDIA…');
+  setBusy('audioBtn',true);
+  try{
+    var x=await jf('/api/ai/voice-command',{method:'POST',body:fd});
+    sh('audioResult',x);await listTransactions();
+  }catch(e){err('audioResult',e)}
+  finally{setBusy('audioBtn',false)}
+}
+
 loadProvider();listTransactions();
-</script></main></body></html>
+</script>
+</body>
+</html>
