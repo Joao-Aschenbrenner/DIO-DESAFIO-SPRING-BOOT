@@ -1,5 +1,6 @@
 package br.com.jaaschenbrenner.budgetai.infrastructure.ai;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -31,7 +32,7 @@ public class NvidiaOmniAudioClient {
 
     public NvidiaOmniAudioClient(RestClient.Builder builder,
                                  @Value("${budgetai.ai.base-url}") String baseUrl,
-                                 @Value("${spring.ai.openai.chat.api-key}") String apiKey,
+                                 @Value("${budgetai.ai.api-key}") String apiKey,
                                  @Value("${budgetai.ai.model}") String model) {
         this.model = model;
         this.inferenceClient = builder.clone()
@@ -75,15 +76,22 @@ public class NvidiaOmniAudioClient {
     }
 
     private String transcribeInline(byte[] bytes, AudioFormat format) {
+        return invoke(List.of(Map.of("role", "user", "content", inlineContent(bytes, format))), null);
+    }
+
+    /**
+     * Monta o payload do fluxo inline (arquivo pequeno): a maior parte do áudio viaja em
+     * data URL, sem asset temporário na NVIDIA. Mantido em visibilidade de pacote para
+     * que o teste automatizado prove que o fluxo inline continua preservado.
+     */
+    List<Map<String, Object>> inlineContent(byte[] bytes, AudioFormat format) {
         String dataUrl = "data:audio/" + format.nvidiaFormat() + ";base64," +
                 Base64.getEncoder().encodeToString(bytes);
 
-        List<Map<String, Object>> content = List.of(
+        return List.of(
                 Map.of("type", "audio_url", "audio_url", Map.of("url", dataUrl)),
                 Map.of("type", "text", "text", transcriptionInstruction())
         );
-
-        return invoke(List.of(Map.of("role", "user", "content", content)), null);
     }
 
     private String transcribeUsingAsset(byte[] bytes, AudioFormat format) throws IOException {
@@ -208,10 +216,17 @@ public class NvidiaOmniAudioClient {
     private record AssetCreateRequest(String contentType, String description) {
     }
 
-    private record AssetResponse(String assetId, String uploadUrl) {
+    /**
+     * A NVIDIA Cloud Functions Asset API responde em snake_case (asset_id/upload_url),
+     * então a desserialização precisa do mapeamento explícito. O record fica com
+     * visibilidade de pacote para o teste de deserialização.
+     */
+    record AssetResponse(
+            @JsonProperty("asset_id") String assetId,
+            @JsonProperty("upload_url") String uploadUrl) {
     }
 
-    private record AudioFormat(String nvidiaFormat, String uploadContentType) {
+    record AudioFormat(String nvidiaFormat, String uploadContentType) {
         static AudioFormat from(String filename, String contentType) {
             String name = filename == null ? "" : filename.toLowerCase();
             String type = contentType == null ? "" : contentType.toLowerCase();

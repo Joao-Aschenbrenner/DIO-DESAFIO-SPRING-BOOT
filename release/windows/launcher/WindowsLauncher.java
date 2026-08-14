@@ -45,6 +45,7 @@ public final class WindowsLauncher {
     private final JButton stopButton = new JButton("Parar");
 
     private volatile Process serverProcess;
+    private volatile String activeKey;
     private Path logFile;
 
     public static void main(String[] args) {
@@ -132,6 +133,8 @@ public final class WindowsLauncher {
             return;
         }
 
+        validateKeyFormat(nvidiaKey);
+
         setStartingState();
         Thread worker = new Thread(() -> startServer(nvidiaKey), "budget-ai-starter");
         worker.setDaemon(true);
@@ -140,6 +143,7 @@ public final class WindowsLauncher {
 
     private void startServer(String nvidiaKey) {
         try {
+            this.activeKey = nvidiaKey;
             RuntimePaths paths = resolveRuntimePaths();
             Path dataDir = resolveDataDir();
             Path logsDir = dataDir.resolve("logs");
@@ -259,7 +263,7 @@ public final class WindowsLauncher {
         try {
             List<String> lines = Files.readAllLines(logFile);
             for (int i = lines.size() - 1; i >= 0; i--) {
-                String line = lines.get(i);
+                String line = maskKey(lines.get(i));
                 if (line.contains("OpenAI API key must be set")) {
                     return "Configuração inválida do Spring AI: um módulo OpenAI não utilizado tentou iniciar sem credencial. Este build deveria manter esses módulos desativados.";
                 }
@@ -283,7 +287,7 @@ public final class WindowsLauncher {
         int start = Math.max(0, lines.size() - count);
         StringBuilder out = new StringBuilder();
         for (int i = start; i < lines.size(); i++) {
-            String line = lines.get(i).trim();
+            String line = maskKey(lines.get(i).trim());
             if (!line.isBlank()) {
                 if (!out.isEmpty()) out.append('\n');
                 out.append(trim(line, 300));
@@ -381,7 +385,7 @@ public final class WindowsLauncher {
     }
 
     private void reportFailure(String title, String message, Throwable ex) {
-        appendLauncherLog(title + ": " + safeMessage(ex));
+        appendLauncherLog(title + ": " + maskKey(safeMessage(ex)));
         SwingUtilities.invokeLater(() -> {
             statusLabel.setText("Falha ao iniciar");
             resetStoppedState();
@@ -395,6 +399,18 @@ public final class WindowsLauncher {
         openButton.setEnabled(false);
         stopButton.setEnabled(false);
         nvidiaKeyField.setEnabled(false);
+    }
+
+    /**
+     * Valida o formato esperado da NVIDIA API Key (nvapi-...) sem exibir a chave.
+     * Apenas alerta: chaves com formato incomum ainda podem funcionar em previews.
+     */
+    private void validateKeyFormat(String key) {
+        if (key.matches("(?i)nvapi-[a-z0-9-]{8,}")) {
+            return;
+        }
+        showWarning("Formato incomum da chave NVIDIA",
+                "A chave informada não segue o padrão esperado de uma NVIDIA API Key (nvapi-...). Confira a chave antes de continuar; o launcher prosseguirá mesmo assim.");
     }
 
     private void resetStoppedState() {
@@ -430,6 +446,18 @@ public final class WindowsLauncher {
             return ex == null ? "erro desconhecido" : ex.getClass().getSimpleName();
         }
         return ex.getMessage();
+    }
+
+    /**
+     * Substitui a chave NVIDIA por *** em qualquer texto exibido ou gravado,
+     * garantindo que o diagnóstico nunca exponha a credencial.
+     */
+    private String maskKey(String value) {
+        String key = activeKey;
+        if (value == null || key == null || key.isBlank()) {
+            return value;
+        }
+        return value.replace(key, "***");
     }
 
     private void showError(String title, String message) {

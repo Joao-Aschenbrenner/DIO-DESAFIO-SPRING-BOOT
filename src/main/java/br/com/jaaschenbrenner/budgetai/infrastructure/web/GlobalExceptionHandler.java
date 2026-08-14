@@ -5,10 +5,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.client.RestClientResponseException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.io.IOException;
@@ -30,6 +32,21 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     ResponseEntity<ApiError> badRequest(IllegalArgumentException ex, HttpServletRequest req) {
         return build(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", message(ex, "Requisição inválida."), List.of(), req, ex, false);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    ResponseEntity<ApiError> unreadableBody(HttpMessageNotReadableException ex, HttpServletRequest req) {
+        return build(HttpStatus.BAD_REQUEST, "MALFORMED_JSON",
+                "O corpo da requisição é inválido: JSON malformado ou tipo de dado incorreto.",
+                List.of(), req, ex, false);
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    ResponseEntity<ApiError> typeMismatch(MethodArgumentTypeMismatchException ex, HttpServletRequest req) {
+        String expected = ex.getRequiredType() == null ? "desconhecido" : ex.getRequiredType().getSimpleName();
+        return build(HttpStatus.BAD_REQUEST, "INVALID_PARAMETER",
+                "Parâmetro inválido: '" + ex.getName() + "'.",
+                List.of("expected=" + expected), req, ex, false);
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
