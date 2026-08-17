@@ -44,6 +44,11 @@ public class TransactionController {
         return listTransactionsUseCase.execute(category);
     }
 
+    @GetMapping("/categories")
+    public List<Category> categories() {
+        return List.of(Category.values());
+    }
+
     public record CreateTransactionRequest(
             @NotBlank String description,
             @Positive long amountInCents,
