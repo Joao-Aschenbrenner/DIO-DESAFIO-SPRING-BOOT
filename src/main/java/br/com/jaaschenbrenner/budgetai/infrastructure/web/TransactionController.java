@@ -5,10 +5,13 @@ import br.com.jaaschenbrenner.budgetai.application.CreateTransactionUseCase;
 import br.com.jaaschenbrenner.budgetai.application.ListTransactionsUseCase;
 import br.com.jaaschenbrenner.budgetai.application.TransactionOutput;
 import br.com.jaaschenbrenner.budgetai.domain.Category;
+import br.com.jaaschenbrenner.budgetai.domain.Transaction;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -50,7 +53,12 @@ public class TransactionController {
     }
 
     public record CreateTransactionRequest(
-            @NotBlank String description,
-            @Positive long amountInCents,
-            @NotNull Category category) {}
+            @NotBlank
+            @Size(max = Transaction.MAX_DESCRIPTION_LENGTH)
+            String description,
+            @Positive
+            @Max(Transaction.MAX_AMOUNT_IN_CENTS)
+            long amountInCents,
+            @NotNull
+            Category category) {}
 }
