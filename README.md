@@ -1,75 +1,248 @@
 <p align="center">
-  <img src="src/main/resources/static/logo.svg" width="128" alt="Budget AI logo">
+  <img src="src/main/resources/static/logo.svg" width="150" alt="Budget AI logo">
 </p>
 
 # Budget AI — Desafio DIO Spring Boot + Spring AI
 
-Assistente financeiro criado para o desafio final da trilha **Spring Boot + Spring AI** da DIO. O projeto recebe comandos por voz ou texto, interpreta a intenção com IA, executa **Tool Calling em casos de uso Java reais**, persiste/consulta transações e devolve uma resposta amigável — inclusive em voz.
+Assistente financeiro desenvolvido como evolução do projeto final da trilha **Spring Boot + Spring AI** da DIO.
 
-A versão de entrega evolui o projeto de referência com painel web responsivo, NVIDIA NIM, tratamento centralizado de erros, testes, instalador Windows e fallback de voz.
+A proposta é demonstrar o fluxo pedido no desafio sem colocar regra de negócio dentro do modelo de IA: a IA entende a intenção e escolhe ferramentas; as operações reais continuam nos casos de uso Java e na persistência da aplicação.
 
 ## O que o projeto faz
 
-Fluxo principal:
+O Budget AI permite registrar e consultar despesas por **voz**, **texto** ou por um endpoint REST tradicional.
 
-```mermaid
-flowchart LR
-    A[Áudio WAV/MP3] --> B[NVIDIA Nemotron Omni]
-    B --> C[Transcrição]
-    C --> D[Spring AI ChatClient]
-    D --> E[Tool Calling]
-    E --> F[Use Cases Java]
-    F --> G[(JPA / H2)]
-    D --> H[Resposta textual]
-    H --> I[Spring AI TextToSpeechModel / MP3]
-    H --> J[Web Speech API - fallback local]
+```text
+Áudio
+  ↓
+NVIDIA Nemotron Omni
+  ↓ transcrição
+Spring AI ChatClient
+  ↓ intenção
+Tool Calling
+  ↓
+Use Cases Java
+  ↓
+JPA / H2
+  ↓
+Resposta final
+  ├─ texto
+  ├─ MP3 via Spring AI TextToSpeechModel (quando configurado)
+  └─ TTS local do navegador como fallback
 ```
 
-O `ChatClient` não grava dados diretamente. As tools chamam os mesmos casos de uso usados pela API REST, preservando as responsabilidades entre `domain`, `application` e `infrastructure`.
+## Como esta entrega cobre o desafio
+
+| Requisito | Implementação |
+|---|---|
+| Spring Boot | API e aplicação local em Java 21 |
+| Spring AI | `ChatClient` + Tool Calling |
+| Áudio → texto | NVIDIA Nemotron Omni |
+| Entender intenção | modelo NVIDIA através da compatibilidade OpenAI do Spring AI |
+| Executar função real | `FinanceTools` chama os mesmos use cases da API REST |
+| Criar/consultar transações | `CreateTransactionUseCase` e `ListTransactionsUseCase` |
+| Persistência | Spring Data JPA + H2 local |
+| Texto → voz | `TextToSpeechModel` opcional, retornando MP3 |
+| Fallback de voz | Web Speech API local em pt-BR |
+| Endpoints REST | transações, IA, transcrição e TTS |
+| Testes | domínio, contexto, contratos de UI/Tool Calling e TTS |
+| Documentação | este README + interface demonstrativa |
 
 ## Evoluções implementadas
 
-- interface web responsiva e explicativa, priorizando o fluxo por voz;
-- NVIDIA NIM / Nemotron Omni para chat e transcrição de áudio;
-- Spring AI `ChatClient` + `@Tool` com funções reais;
-- normalização de categorias em português/inglês para reduzir falhas de Tool Calling;
-- persistência local com Spring Data JPA + H2;
-- `TextToSpeechModel` real para geração de MP3 quando uma chave TTS opcional está configurada;
-- fallback para Web Speech API local quando TTS externo não está configurado;
-- validação de WAV/MP3, tamanho, comandos vazios e valores financeiros;
-- tratamento de erros com mensagens amigáveis e `correlationId` para diagnóstico;
-- testes de domínio, tools, uploads, contratos da UI e smoke test do ApplicationContext;
-- instalador Windows com Java 21 embutido e ícone próprio do Budget AI.
+Além do fluxo base do desafio, esta versão adiciona:
+
+- interface web responsiva e explicativa;
+- fluxo visual das cinco etapas do desafio;
+- NVIDIA NIM como provedor principal de texto e áudio de entrada;
+- uma única chave NVIDIA para Chat, Tool Calling e transcrição;
+- TTS real e opcional através da interface `TextToSpeechModel` do Spring AI;
+- fallback local de voz quando o TTS cloud não está configurado;
+- tratamento centralizado de erros com `correlationId`;
+- validações no REST **e também no domínio**, para que Tool Calling não contorne regras;
+- categorias compartilhadas entre backend e interface;
+- valores manuais digitados em reais e convertidos para centavos;
+- servidor preso a `127.0.0.1`;
+- console H2 desligado por padrão;
+- launcher Windows com Java 21 embutido;
+- instalador/atalho com ícone próprio;
+- logs de diagnóstico sem gravar as chaves de API.
+
+## Interface
+
+A interface foi organizada para demonstrar o projeto para alguém que não conhece o código:
+
+1. **Fluxo por voz** é a ação principal.
+2. A tela mostra as etapas áudio → transcrição → Spring AI → Tool Calling → resposta.
+3. O retorno exibe texto legível, não JSON cru.
+4. As transações aparecem em uma lista com valor em reais, categoria e data.
+5. O cadastro manual fica como alternativa para testar o endpoint REST sem IA.
+6. Informações de provedor/modelo ficam em **Detalhes técnicos**.
+7. O layout possui regras de reflow para telas estreitas e não depende de uma largura mínima de card.
 
 ## Arquitetura
 
 ```text
-src/main/java/br/com/jaaschenbrenner/budgetai/
-├── domain/           # Entidades, value objects e contratos
-├── application/      # Casos de uso
-└── infrastructure/
-    ├── ai/           # ChatClient, NVIDIA, tools e endpoints de IA
-    ├── persistence/  # JPA/H2
-    ├── web/          # REST e tratamento base de erros
-    └── delivery/     # UX de entrega, TTS e hardening adicional
+src/main/java/br/com/jaaschenbrenner/budgetai
+├── domain
+│   ├── Transaction
+│   ├── TransactionId
+│   ├── Category
+│   └── TransactionRepository
+├── application
+│   ├── CreateTransactionUseCase
+│   ├── ListTransactionsUseCase
+│   └── TransactionOutput
+└── infrastructure
+    ├── ai
+    │   ├── AiConfiguration
+    │   ├── AiController
+    │   ├── FinanceTools
+    │   ├── NvidiaOmniAudioClient
+    │   ├── SpeechController
+    │   ├── TranscriptionController
+    │   └── VoiceCommandController
+    ├── persistence
+    ├── config
+    └── web
 ```
 
-### Tool Calling
+A camada de domínio não depende de Spring AI. A IA entra como adaptador em `infrastructure/ai` e chama casos de uso da camada `application`.
 
-As ferramentas financeiras expostas ao modelo são:
+## Tool Calling
 
-- `registrarDespesa(descricao, valorEmReais, categoria)`;
-- `listarDespesas(categoria)`.
+As tools expostas ao modelo são operações reais:
 
-A conversão de reais para centavos e a normalização da categoria acontecem no código Java antes do caso de uso. Categorias desconhecidas são tratadas como `OUTROS`, evitando quebrar o fluxo por pequenas variações do modelo.
+- `registrarDespesa(...)`
+- `listarDespesas(...)`
 
-## Como executar
+A categoria da consulta é opcional para que a IA consiga listar **todas** as despesas sem inventar um filtro. As descrições das tools também informam explicitamente as categorias válidas e o formato do valor em centavos.
 
-### Requisitos para desenvolvimento
+Categorias do domínio:
 
-- Java 21;
-- Gradle;
-- uma `NVIDIA_API_KEY`.
+```text
+ALIMENTACAO
+TRANSPORTE
+SAUDE
+LAZER
+MORADIA
+EDUCACAO
+OUTROS
+```
+
+## IA e transcrição com NVIDIA
+
+Configuração principal:
+
+```text
+Provider: NVIDIA NIM
+Base URL: https://integrate.api.nvidia.com
+Modelo:   nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
+Chave:    NVIDIA_API_KEY
+```
+
+Arquivos WAV e MP3 são aceitos, com limite de 50 MB.
+
+Áudios pequenos são enviados inline. Para arquivos maiores, o cliente cria um asset temporário NVIDIA, envia o arquivo por HTTPS, usa a referência no modelo e tenta remover o asset ao terminar.
+
+## Text-to-Speech
+
+A saída de voz possui dois níveis.
+
+### 1. Spring AI `TextToSpeechModel` — opcional
+
+Se uma chave OpenAI for informada no campo opcional do launcher:
+
+```text
+OPENAI_TTS_API_KEY=...
+BUDGETAI_TTS_PROVIDER=openai
+```
+
+o Spring AI habilita um `TextToSpeechModel`. O endpoint:
+
+```text
+POST /api/ai/speech
+Content-Type: application/json
+Accept: audio/mpeg
+```
+
+gera um MP3 a partir da resposta textual.
+
+### 2. Fallback local
+
+Se nenhuma chave de TTS for configurada, o projeto continua totalmente funcional. A interface usa a Web Speech API disponível no navegador e mantém a resposta em texto caso síntese de voz não esteja disponível.
+
+A chave NVIDIA continua sendo a única credencial **obrigatória**.
+
+## Tratamento de erros
+
+A API usa `@RestControllerAdvice` e retorna uma estrutura consistente:
+
+```json
+{
+  "status": 400,
+  "code": "VALIDATION_ERROR",
+  "message": "Revise os campos informados.",
+  "path": "/api/transactions",
+  "correlationId": "uuid",
+  "details": [
+    "description: não deve estar em branco"
+  ]
+}
+```
+
+Há tratamento específico para:
+
+- validação de body;
+- JSON/categoria inválidos;
+- parâmetro inválido;
+- arquivo obrigatório ausente;
+- arquivo acima de 50 MB;
+- formato HTTP não suportado;
+- endpoint/método inválido;
+- erro de persistência;
+- erro do provedor NVIDIA;
+- erro do TTS;
+- TTS não configurado;
+- I/O;
+- erro inesperado.
+
+Stack traces ficam somente no log. A interface mostra primeiro uma mensagem humana e deixa código/correlação dentro de **detalhes técnicos**.
+
+## Robustez e segurança local
+
+- `server.address=127.0.0.1`: a API não fica exposta para a LAN.
+- H2 Console desligado por padrão.
+- As chaves do launcher não são gravadas em arquivo.
+- O upload temporário de áudio exige URL HTTPS e rejeita destinos locais.
+- O domínio valida descrição, categoria e valor mesmo quando a operação vem de Tool Calling.
+- O launcher detecta porta ocupada, banco em uso e falhas de inicialização e aponta o arquivo de log.
+- O TTS opcional não pode impedir o boot quando não está configurado.
+
+## Endpoints
+
+```text
+GET  /api/system/ai-provider
+
+POST /api/ai/command
+POST /api/ai/transcribe
+POST /api/ai/voice-command
+
+GET  /api/ai/speech/status
+POST /api/ai/speech
+
+GET  /api/transactions
+GET  /api/transactions/categories
+POST /api/transactions
+```
+
+## Como executar em desenvolvimento
+
+Pré-requisitos:
+
+- Java 21
+- Gradle
+- NVIDIA NIM API Key
 
 PowerShell:
 
@@ -79,132 +252,102 @@ gradle clean test
 gradle bootRun
 ```
 
-Abra:
+Acesse:
 
 ```text
-http://localhost:8080
+http://127.0.0.1:8080
 ```
 
-### Voz MP3 via Spring AI (opcional)
-
-A aplicação funciona sem uma segunda chave: nesse caso, a interface usa a voz local do navegador como fallback.
-
-Para testar o `TextToSpeechModel` real e receber MP3 pelo backend:
+### TTS Spring AI opcional
 
 ```powershell
-$env:BUDGETAI_TTS_API_KEY="sua-chave-openai"
+$env:OPENAI_TTS_API_KEY="sua-chave-openai"
+$env:BUDGETAI_TTS_PROVIDER="openai"
 gradle bootRun
 ```
 
-Endpoint:
-
-```text
-POST /api/ai/speech
-Content-Type: application/json
-
-{"text":"Despesa registrada com sucesso."}
-```
-
-Quando configurado, o endpoint retorna `audio/mpeg`. Sem a chave opcional, retorna erro controlado e a interface mantém o fallback local.
+Sem essas duas variáveis, a aplicação inicia normalmente e usa TTS local no navegador.
 
 ## Como testar o fluxo principal
 
-1. Inicie o Budget AI e confira o indicador **IA pronta**.
-2. Grave um WAV/MP3 curto, por exemplo: `Gastei 42 reais no mercado`.
-3. Em **Experimente o fluxo do desafio**, selecione o áudio e clique em **Processar comando de voz**.
-4. Confira a transcrição reconhecida e a resposta do assistente.
-5. Verifique se a nova transação apareceu na lista.
-6. Teste uma consulta: `Quais foram meus gastos com alimentação?`.
-7. Teste também o comando por texto e o cadastro manual.
+### Voz
 
-A interface mostra as etapas da execução sem expor JSON como experiência principal. Dados técnicos continuam disponíveis na seção recolhível **Detalhes técnicos**.
+1. Abra **Experimente o fluxo completo por voz**.
+2. Selecione um WAV ou MP3.
+3. Use uma frase como: `Gastei 42 reais no mercado`.
+4. Clique em **Processar comando por voz**.
+5. Confira a transcrição.
+6. Confira a resposta da IA.
+7. Veja a transação aparecer em **Transações salvas**.
+8. Use **Ouvir resposta**.
 
-## Endpoints principais
+### Texto
 
-| Método | Endpoint | Finalidade |
-|---|---|---|
-| GET | `/api/system/ai-provider` | estado dos provedores/capacidades |
-| POST | `/api/ai/command` | comando textual para ChatClient/Tools |
-| POST | `/api/ai/transcribe` | transcrever WAV/MP3 com NVIDIA |
-| POST | `/api/ai/voice-command` | pipeline de voz em uma chamada |
-| POST | `/api/ai/speech` | gerar MP3 com Spring AI TTS |
-| GET | `/api/transactions` | listar/filtrar transações |
-| POST | `/api/transactions` | criar transação manual |
-| GET | `/api/transactions/categories` | categorias aceitas pelo domínio |
+Exemplos:
 
-## Tratamento de erros
-
-A API diferencia falhas de validação, JSON inválido, arquivo ausente, formato de áudio, limite de upload, indisponibilidade de rede, provedor externo, TTS não configurado e acesso ao banco.
-
-Respostas de erro incluem um `correlationId` sem expor stack trace para a interface. O identificador permite localizar a exceção correspondente no log.
-
-Exemplo:
-
-```json
-{
-  "status": 400,
-  "code": "INVALID_REQUEST",
-  "message": "Não foi possível interpretar os dados enviados.",
-  "path": "/api/transactions",
-  "correlationId": "...",
-  "details": []
-}
+```text
+Registre uma despesa de 25 reais com Uber.
+Liste todas as minhas despesas.
+Quais são meus gastos com alimentação?
 ```
 
-## Testes
+### REST manual
 
-```powershell
+Abra **Adicionar uma transação manualmente**, informe um valor como `12,50`, categoria e descrição. Esse fluxo testa o endpoint REST sem passar pela IA.
+
+## Testes automatizados
+
+Execute:
+
+```bash
 gradle clean test
 ```
 
 A suíte cobre, entre outros pontos:
 
-- criação e validação de transações;
+- criação de transação;
+- invariantes do domínio;
 - inicialização do ApplicationContext;
-- normalização de categorias;
-- conversão do Tool Calling de reais para centavos;
-- arquivos WAV/MP3 válidos e inválidos;
-- contrato entre categorias do domínio e interface;
-- presença do fluxo DIO, responsividade e TTS na UI.
+- categorias da interface alinhadas ao enum Java;
+- parâmetro opcional da tool de listagem;
+- TTS Spring AI + fallback local;
+- comportamento do `SpeechController`;
+- contrato de responsividade/explicação da UI;
+- configurações locais de segurança.
 
-O GitHub Actions executa os testes antes de produzir o instalador Windows.
+O workflow Windows também executa testes antes de montar o instalador.
 
 ## Executável Windows
 
-A release `v0.3.5-windows` é preparada como **Delivery Candidate** e contém:
+O instalador é produzido com `jpackage` e inclui:
 
-- instalador `.exe` x64;
 - Java 21 embutido;
-- ícone próprio do Budget AI;
-- launcher para informar a chave NVIDIA;
-- backend Spring Boot + painel web local.
+- launcher gráfico;
+- ícone próprio Budget AI;
+- backend Spring Boot;
+- criação de atalho/menu;
+- banco e logs em `%LOCALAPPDATA%\BudgetAI`.
 
-O instalador é uma conveniência para demonstração. O código-fonte e a execução via Gradle continuam sendo a referência da entrega.
+O launcher solicita:
 
-## Tecnologias
+- **NVIDIA NIM API Key** — obrigatória;
+- **OpenAI API Key para TTS** — opcional.
 
-- Java 21;
-- Spring Boot 4;
-- Spring AI;
-- Spring Data JPA;
-- H2;
-- NVIDIA NIM / Nemotron Omni;
-- OpenAI Speech via Spring AI, opcional;
-- HTML, CSS e JavaScript sem framework no painel;
-- JUnit 5, AssertJ e Mockito;
-- GitHub Actions;
-- `jpackage` + WiX para Windows.
+## O que aprendi / decisões do projeto
 
-## O que aprendi no desafio
+Os principais aprendizados desta evolução foram:
 
-O principal aprendizado foi separar a responsabilidade da IA da regra de negócio. O modelo interpreta a intenção e decide quando usar uma tool, mas quem valida, cria, consulta e persiste uma transação são os casos de uso Java.
+- a IA deve decidir **qual operação** executar, mas a regra real pertence à aplicação;
+- Tool Calling precisa de schemas e parâmetros bem descritos para reduzir chamadas erradas;
+- validação só no controller não é suficiente, porque uma tool pode chamar o caso de uso diretamente;
+- integração de IA precisa de tratamento de indisponibilidade, timeout e respostas vazias;
+- uma interface de demonstração deve explicar o fluxo, não apenas imprimir JSON;
+- recursos opcionais, como TTS cloud, não devem derrubar a aplicação quando não estão configurados.
 
-Também foi importante tratar integrações de IA como dependências externas sujeitas a falhas: credencial inválida, rede indisponível, resposta vazia e arquivo incompatível precisam gerar erros previsíveis sem corromper o estado da aplicação.
+## Projeto de referência da DIO
 
-## Referência da DIO
-
-Projeto base da trilha:
+O projeto foi construído a partir dos conceitos apresentados na trilha:
 
 https://github.com/digitalinnovationone/dio-spring-boot-learning-track/tree/main/05-spring-ai
 
-Esta implementação utiliza o projeto da trilha como referência conceitual e evolui a solução com escolhas próprias de arquitetura, interface, provedor de IA, testes e empacotamento.
+Esta implementação é uma evolução própria para fins de estudo e entrega do desafio.

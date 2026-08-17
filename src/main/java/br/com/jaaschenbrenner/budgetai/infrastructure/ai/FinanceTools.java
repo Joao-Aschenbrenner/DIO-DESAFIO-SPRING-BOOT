@@ -6,10 +6,9 @@ import br.com.jaaschenbrenner.budgetai.application.ListTransactionsUseCase;
 import br.com.jaaschenbrenner.budgetai.application.TransactionOutput;
 import br.com.jaaschenbrenner.budgetai.domain.Category;
 import org.springframework.ai.tool.annotation.Tool;
+import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.List;
 
 @Component
@@ -23,32 +22,32 @@ public class FinanceTools {
         this.listTransactionsUseCase = listTransactionsUseCase;
     }
 
-    @Tool(description = "Registra uma nova despesa financeira. Informe descricao, valor em reais (por exemplo 42.50) e uma categoria. Categorias: ALIMENTACAO, TRANSPORTE, SAUDE, LAZER, MORADIA, EDUCACAO ou OUTROS.")
-    public TransactionOutput registrarDespesa(String descricao, double valorEmReais, String categoria) {
-        if (descricao == null || descricao.isBlank()) {
-            throw new IllegalArgumentException("A descrição da despesa é obrigatória.");
-        }
-        if (!Double.isFinite(valorEmReais) || valorEmReais <= 0) {
-            throw new IllegalArgumentException("O valor da despesa deve ser maior que zero.");
-        }
-
-        long valorEmCentavos;
-        try {
-            valorEmCentavos = BigDecimal.valueOf(valorEmReais)
-                    .setScale(2, RoundingMode.HALF_UP)
-                    .movePointRight(2)
-                    .longValueExact();
-        } catch (ArithmeticException ex) {
-            throw new IllegalArgumentException("O valor informado é grande demais para ser registrado.", ex);
-        }
-
-        Category normalizedCategory = Category.fromExternalValue(categoria);
-        return createTransactionUseCase.execute(new CreateTransactionInput(
-                descricao.trim(), valorEmCentavos, normalizedCategory));
+    @Tool(description = """
+            Registra uma nova despesa financeira real no sistema.
+            Use quando a pessoa disser que gastou, pagou, comprou ou quiser registrar uma despesa.
+            Categorias permitidas: ALIMENTACAO, TRANSPORTE, SAUDE, LAZER, MORADIA, EDUCACAO e OUTROS.
+            Nunca invente categoria fora dessa lista.
+            """)
+    public TransactionOutput registrarDespesa(
+            @ToolParam(description = "Descrição curta e objetiva da despesa, com no máximo 120 caracteres")
+            String descricao,
+            @ToolParam(description = "Valor inteiro em centavos. Exemplo: R$ 42,00 deve ser enviado como 4200")
+            long valorEmCentavos,
+            @ToolParam(description = "Categoria exata: ALIMENTACAO, TRANSPORTE, SAUDE, LAZER, MORADIA, EDUCACAO ou OUTROS")
+            Category categoria) {
+        return createTransactionUseCase.execute(new CreateTransactionInput(descricao, valorEmCentavos, categoria));
     }
 
-    @Tool(description = "Lista despesas financeiras. A categoria é opcional; use TODAS para listar tudo. Categorias: ALIMENTACAO, TRANSPORTE, SAUDE, LAZER, MORADIA, EDUCACAO ou OUTROS.")
-    public List<TransactionOutput> listarDespesas(String categoria) {
-        return listTransactionsUseCase.execute(Category.fromExternalValueOrNull(categoria));
+    @Tool(description = """
+            Consulta as despesas financeiras reais salvas no sistema.
+            Use para perguntas como 'quais foram meus gastos?', 'liste as despesas' ou 'o que gastei com alimentação?'.
+            A categoria é opcional; quando ausente, liste todas as despesas.
+            """)
+    public List<TransactionOutput> listarDespesas(
+            @ToolParam(
+                    description = "Filtro opcional: ALIMENTACAO, TRANSPORTE, SAUDE, LAZER, MORADIA, EDUCACAO ou OUTROS",
+                    required = false)
+            Category categoria) {
+        return listTransactionsUseCase.execute(categoria);
     }
 }

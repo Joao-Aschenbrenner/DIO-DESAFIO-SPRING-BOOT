@@ -1,37 +1,237 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Budget AI - DIO Spring AI</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b1118">
+<title>Budget AI — Assistente Financeiro com Spring AI</title>
 <link rel="icon" type="image/svg+xml" href="/logo.svg">
-<style>
-body{font-family:system-ui,Arial;margin:0;background:#0d1117;color:#e6edf3}main{max-width:1050px;margin:auto;padding:30px 18px}.brand{display:flex;align-items:center;gap:16px}.brand img{width:74px;height:74px}.brand h1{margin:0}.muted{color:#8b949e}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-top:22px}.card{background:#161b22;border:1px solid #30363d;border-radius:14px;padding:18px}input,select,textarea,button{width:100%;box-sizing:border-box;margin-top:8px;padding:10px;border-radius:8px;border:1px solid #30363d;background:#0d1117;color:#e6edf3}button{background:#238636;cursor:pointer;font-weight:700}button.secondary{background:#21262d}.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.toggle{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px}.toggle input{width:auto;margin:0}pre{white-space:pre-wrap;word-break:break-word;background:#0d1117;padding:12px;border-radius:8px;min-height:42px}pre.error{border:1px solid #f85149;color:#ffb4ad}label{display:block;margin-top:10px;font-size:13px}.speech-status{margin-top:10px;font-size:13px}
-</style>
-</head><body><main>
-<div class="brand"><img src="/logo.svg" alt="Logo Budget AI"><div><h1>Budget AI</h1><div class="muted">DIO Spring Boot + Spring AI • NVIDIA Nemotron Omni • texto + áudio + Tool Calling + resposta falada</div></div></div>
-<div class="grid">
-<section class="card"><h2>Provedor</h2><div class="muted">NVIDIA_API_KEY para IA e áudio de entrada. A resposta falada usa TTS local do navegador em pt-BR, sem segunda chave.</div><button onclick="loadProvider()">Atualizar status</button><pre id="provider">Carregando...</pre><div id="speechStatus" class="speech-status muted"></div></section>
-<section class="card"><h2>Comando por texto</h2><textarea id="command" rows="4">Registre uma despesa de 42 reais com mercado.</textarea><button onclick="sendCommand()">Enviar para a IA</button><pre id="commandResult"></pre><div class="actions"><button class="secondary" onclick="speakLast('command')">🔊 Ouvir resposta</button><button class="secondary" onclick="stopSpeech()">⏹ Parar voz</button></div></section>
-<section class="card"><h2>Nova transação manual</h2><label>Descrição</label><input id="description" value="Café"><label>Valor em centavos</label><input id="amount" type="number" value="1250"><label>Categoria</label><select id="category"><option value="ALIMENTACAO">Alimentação</option><option value="TRANSPORTE">Transporte</option><option value="SAUDE">Saúde</option><option value="LAZER">Lazer</option><option value="MORADIA">Moradia</option><option value="EDUCACAO">Educação</option><option value="OUTROS">Outros</option></select><button onclick="createTransaction()">Salvar</button><pre id="createResult"></pre></section>
-<section class="card"><h2>Transações</h2><button onclick="listTransactions()">Atualizar lista</button><pre id="transactions"></pre></section>
-<section class="card"><h2>Comando por áudio</h2><div class="muted">Envie WAV ou MP3. O NVIDIA Nemotron Omni transcreve, o ChatClient executa as tools financeiras e a resposta final pode ser falada pelo TTS local.</div><input id="audio" type="file" accept=".wav,.mp3,audio/wav,audio/mpeg"><label class="toggle"><input id="autoSpeak" type="checkbox" checked> Falar a resposta automaticamente</label><button onclick="sendAudio()">Transcrever, executar e responder</button><pre id="audioResult"></pre><div class="actions"><button class="secondary" onclick="speakLast('audio')">🔊 Ouvir resposta</button><button class="secondary" onclick="stopSpeech()">⏹ Parar voz</button></div></section>
-</div>
-<script>
-const lastSpeech={command:'',audio:''};
-const categoryLabels={ALIMENTACAO:'Alimentação',TRANSPORTE:'Transporte',SAUDE:'Saúde',LAZER:'Lazer',MORADIA:'Moradia',EDUCACAO:'Educação',OUTROS:'Outros'};
-async function jf(u,o={}){const r=await fetch(u,o),t=await r.text();let b;try{b=JSON.parse(t)}catch{b=t}if(!r.ok){const e=new Error(typeof b==='string'?b:(b.message||'Falha na requisição'));e.payload=b;e.status=r.status;throw e}return b}
-function sh(i,v,isError=false){const el=document.getElementById(i);el.classList.toggle('error',isError);el.textContent=typeof v==='string'?v:JSON.stringify(v,null,2)}
-function err(i,e){const p=e.payload;if(p&&typeof p==='object'){let m=`${p.code||'ERROR'}: ${p.message||e.message}`;if(p.correlationId)m+=`\nCorrelação: ${p.correlationId}`;if(Array.isArray(p.details)&&p.details.length)m+=`\n${p.details.join('\n')}`;sh(i,m,true)}else sh(i,e.message||String(e),true)}
-function speechSupported(){return 'speechSynthesis' in window&&'SpeechSynthesisUtterance' in window}
-function updateSpeechStatus(){const el=document.getElementById('speechStatus');el.textContent=speechSupported()?'✓ TTS local disponível neste navegador.':'⚠ Este navegador não oferece Web Speech TTS; a resposta em texto continua disponível.'}
-function speakText(text){if(!text)return false;if(!speechSupported()){sh('audioResult','TTS local indisponível neste navegador. A resposta em texto continua funcionando.',true);return false}window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(String(text));u.lang='pt-BR';u.rate=1;u.pitch=1;const voices=window.speechSynthesis.getVoices();const pt=voices.find(v=>/^pt-BR$/i.test(v.lang))||voices.find(v=>/^pt/i.test(v.lang));if(pt)u.voice=pt;window.speechSynthesis.speak(u);return true}
-function speakLast(kind){const text=lastSpeech[kind];if(!text){const target=kind==='command'?'commandResult':'audioResult';sh(target,'Ainda não existe uma resposta da IA para reproduzir.',true);return}speakText(text)}
-function stopSpeech(){if(speechSupported())window.speechSynthesis.cancel()}
-async function loadProvider(){try{sh('provider',await jf('/api/system/ai-provider'))}catch(e){err('provider',e)}}
-async function loadCategories(){try{const values=await jf('/api/transactions/categories');if(Array.isArray(values)&&values.length){const select=document.getElementById('category');const previous=select.value;select.innerHTML='';for(const value of values){const option=document.createElement('option');option.value=value;option.textContent=categoryLabels[value]||value;select.appendChild(option)}if(values.includes(previous))select.value=previous}}catch(e){console.warn('Falha ao carregar categorias; usando fallback embutido.',e)}}
-async function sendCommand(){sh('commandResult','Processando...');try{const x=await jf('/api/ai/command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:document.getElementById('command').value})});lastSpeech.command=x.response||'';sh('commandResult',x);await listTransactions()}catch(e){err('commandResult',e)}}
-async function createTransaction(){sh('createResult','Salvando...');try{const x=await jf('/api/transactions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({description:document.getElementById('description').value,amountInCents:Number(document.getElementById('amount').value),category:document.getElementById('category').value})});sh('createResult',x);await listTransactions()}catch(e){err('createResult',e)}}
-async function listTransactions(){try{sh('transactions',await jf('/api/transactions'))}catch(e){err('transactions',e)}}
-async function sendAudio(){const f=document.getElementById('audio').files[0];if(!f){sh('audioResult','Escolha um WAV ou MP3.',true);return}const fd=new FormData();fd.append('file',f);sh('audioResult','Processando áudio na NVIDIA...');try{const x=await jf('/api/ai/voice-command',{method:'POST',body:fd});lastSpeech.audio=x.response||'';sh('audioResult',x);if(document.getElementById('autoSpeak').checked)speakText(lastSpeech.audio);await listTransactions()}catch(e){err('audioResult',e)}}
-updateSpeechStatus();loadCategories();loadProvider();listTransactions();
-</script></main></body></html>
+<link rel="stylesheet" href="/app.css">
+
+</head>
+<body>
+<main class="shell">
+  <header class="topbar">
+    <div class="brand">
+      <img src="/logo.svg" alt="Logo do Budget AI">
+      <div class="brand-copy">
+        <h2 class="brand-title">Budget AI</h2>
+        <p class="brand-subtitle">Projeto DIO • Spring Boot + Spring AI</p>
+      </div>
+    </div>
+    <div id="appStatus" class="status-pill" aria-live="polite">
+      <span class="status-dot" aria-hidden="true"></span>
+      <span id="appStatusText">Verificando serviços…</span>
+    </div>
+  </header>
+
+  <section class="hero" aria-labelledby="heroTitle">
+    <div class="hero-main">
+      <p class="eyebrow">Assistente financeiro inteligente</p>
+      <h1 id="heroTitle">Fale um gasto. A IA entende e executa a operação real.</h1>
+      <p class="hero-lead">
+        Envie um áudio ou escreva um comando. O Budget AI transcreve, interpreta a intenção com Spring AI,
+        chama as ferramentas da aplicação e registra ou consulta transações persistidas localmente.
+      </p>
+      <div class="badges" aria-label="Tecnologias principais">
+        <span class="badge">Java 21</span>
+        <span class="badge">Spring Boot</span>
+        <span class="badge">Spring AI</span>
+        <span class="badge">NVIDIA Nemotron Omni</span>
+        <span class="badge">Tool Calling</span>
+        <span class="badge">JPA + H2</span>
+      </div>
+    </div>
+    <aside class="hero-aside">
+      <h2>O que este projeto demonstra</h2>
+      <p>O foco do desafio é conectar IA a regras e funções reais sem colocar a lógica de negócio dentro do modelo.</p>
+      <ul class="check-list">
+        <li>Áudio para texto com NVIDIA.</li>
+        <li>ChatClient interpreta a intenção.</li>
+        <li>Tools chamam os casos de uso Java.</li>
+        <li>Dados são persistidos localmente.</li>
+        <li>Resposta pode voltar em voz.</li>
+      </ul>
+    </aside>
+  </section>
+
+  <section class="flow" aria-labelledby="flowTitle">
+    <div class="flow-head">
+      <h2 id="flowTitle">Fluxo principal do desafio</h2>
+      <span>Da entrada de voz até a resposta final</span>
+    </div>
+    <div class="flow-grid">
+      <div class="flow-step"><b>01</b><span>Receber áudio</span></div>
+      <div class="flow-step"><b>02</b><span>Transcrever para texto</span></div>
+      <div class="flow-step"><b>03</b><span>Entender com Spring AI</span></div>
+      <div class="flow-step"><b>04</b><span>Executar Tool Calling real</span></div>
+      <div class="flow-step"><b>05</b><span>Responder em texto e voz</span></div>
+    </div>
+  </section>
+
+  <section class="card featured" aria-labelledby="voiceTitle">
+    <div class="card-head">
+      <div>
+        <h2 id="voiceTitle">Experimente o fluxo completo por voz</h2>
+        <p>Use WAV ou MP3. Exemplo: “Gastei 42 reais no mercado”. O resultado mostra o que foi entendido e a resposta da IA.</p>
+      </div>
+      <span class="step-number" aria-hidden="true">1</span>
+    </div>
+
+    <div class="voice-layout">
+      <div>
+        <label class="file-zone" for="audio">
+          <strong>Escolha um arquivo de áudio</strong>
+          <small>WAV ou MP3 • máximo de 50 MB • o arquivo é usado somente para processar este comando</small>
+          <input id="audio" type="file" accept=".wav,.mp3,audio/wav,audio/mpeg">
+        </label>
+        <div class="examples">Exemplo de fala: <code>Gastei 42 reais no mercado.</code></div>
+        <div class="control-row">
+          <button id="voiceButton" class="btn-primary" type="button" onclick="processVoice()">Processar comando por voz</button>
+          <label class="toggle" for="autoSpeak">
+            <input id="autoSpeak" type="checkbox" checked>
+            Falar a resposta automaticamente
+          </label>
+        </div>
+        <div id="voiceFeedback" class="feedback" aria-live="polite"></div>
+      </div>
+
+      <ol id="voiceProgress" class="progress" aria-label="Etapas do processamento">
+        <li data-step="1"><span class="progress-mark">1</span><span>Áudio selecionado</span></li>
+        <li data-step="2"><span class="progress-mark">2</span><span>NVIDIA transcreve o áudio</span></li>
+        <li data-step="3"><span class="progress-mark">3</span><span>Spring AI interpreta a intenção</span></li>
+        <li data-step="4"><span class="progress-mark">4</span><span>Tool Calling executa o caso de uso</span></li>
+        <li data-step="5"><span class="progress-mark">5</span><span>Resposta final em texto e voz</span></li>
+      </ol>
+    </div>
+
+    <div id="voiceResult" class="result-panel" hidden>
+      <div class="result-section">
+        <div class="result-label">O que foi entendido</div>
+        <p id="voiceTranscription" class="result-text"></p>
+      </div>
+      <div class="result-section">
+        <div class="result-label">Resposta do assistente</div>
+        <p id="voiceResponse" class="result-text"></p>
+        <div class="result-actions">
+          <button class="btn-secondary" type="button" onclick="speakLast('voice')">🔊 Ouvir resposta</button>
+          <button class="btn-ghost" type="button" onclick="stopSpeech()">Parar voz</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="secondary-grid">
+    <section class="card" aria-labelledby="textTitle">
+      <div class="card-head">
+        <div>
+          <h2 id="textTitle">Comando por texto</h2>
+          <p>Use a mesma IA e as mesmas tools sem precisar enviar áudio.</p>
+        </div>
+        <span class="step-number" aria-hidden="true">2</span>
+      </div>
+      <label for="command">O que você quer fazer?</label>
+      <textarea id="command" maxlength="1200">Registre uma despesa de 42 reais com mercado.</textarea>
+      <div class="quick-actions" aria-label="Exemplos de comandos">
+        <button class="quick" type="button" onclick="useExample('Registre uma despesa de 25 reais com Uber.')">Registrar Uber</button>
+        <button class="quick" type="button" onclick="useExample('Liste todas as minhas despesas.')">Listar despesas</button>
+        <button class="quick" type="button" onclick="useExample('Quais são meus gastos com alimentação?')">Consultar alimentação</button>
+      </div>
+      <button id="textButton" class="btn-primary full" type="button" onclick="sendTextCommand()">Enviar para a IA</button>
+      <div id="textFeedback" class="feedback" aria-live="polite"></div>
+      <div id="textResult" class="result-panel" hidden>
+        <div class="result-section">
+          <div class="result-label">Resposta do assistente</div>
+          <p id="textResponse" class="result-text"></p>
+          <div class="result-actions">
+            <button class="btn-secondary" type="button" onclick="speakLast('text')">🔊 Ouvir resposta</button>
+            <button class="btn-ghost" type="button" onclick="stopSpeech()">Parar voz</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="transactionsTitle">
+      <div class="transactions-head">
+        <div>
+          <h2 id="transactionsTitle">Transações salvas</h2>
+          <p class="brand-subtitle">Dados persistidos localmente pelo backend Java</p>
+        </div>
+        <span id="transactionCount" class="count-pill">0 itens</span>
+      </div>
+      <button id="refreshButton" class="btn-secondary full" type="button" onclick="loadTransactions()">Atualizar lista</button>
+      <div id="transactionsFeedback" class="feedback" aria-live="polite"></div>
+      <div id="transactionList" class="transaction-list"></div>
+    </section>
+  </div>
+
+  <details class="details-card" id="manualDetails">
+    <summary>
+      <span>Adicionar uma transação manualmente <small class="brand-subtitle">— alternativa sem IA</small></span>
+    </summary>
+    <div class="details-body">
+      <p class="brand-subtitle">
+        Este formulário existe para testar diretamente o endpoint REST. No fluxo principal, a IA chama o mesmo caso de uso por Tool Calling.
+      </p>
+      <div class="form-grid">
+        <div>
+          <label for="description">Descrição</label>
+          <input id="description" type="text" maxlength="120" value="Café" autocomplete="off">
+        </div>
+        <div>
+          <label for="amount">Valor (R$)</label>
+          <input id="amount" type="text" inputmode="decimal" value="12,50" placeholder="0,00" autocomplete="off">
+        </div>
+        <div>
+          <label for="category">Categoria</label>
+          <select id="category">
+            <option value="ALIMENTACAO">Alimentação</option>
+            <option value="TRANSPORTE">Transporte</option>
+            <option value="SAUDE">Saúde</option>
+            <option value="LAZER">Lazer</option>
+            <option value="MORADIA">Moradia</option>
+            <option value="EDUCACAO">Educação</option>
+            <option value="OUTROS">Outros</option>
+          </select>
+        </div>
+      </div>
+      <p class="form-hint">O valor é exibido em reais aqui e convertido com segurança para centavos antes de chamar a API.</p>
+      <button id="manualButton" class="btn-primary" type="button" onclick="createManualTransaction()">Salvar transação</button>
+      <div id="manualFeedback" class="feedback" aria-live="polite"></div>
+    </div>
+  </details>
+
+  <details class="details-card" id="techDetails">
+    <summary>
+      <span>Detalhes técnicos <small class="brand-subtitle">— para avaliação e diagnóstico</small></span>
+    </summary>
+    <div class="details-body">
+      <div class="tech-grid">
+        <div class="tech-item"><b>IA principal</b><span id="techProvider">Carregando…</span></div>
+        <div class="tech-item"><b>Modelo</b><span id="techModel">Carregando…</span></div>
+        <div class="tech-item"><b>Entrada de áudio</b><span id="techAudio">Carregando…</span></div>
+        <div class="tech-item"><b>Saída de voz</b><span id="techSpeech">Carregando…</span></div>
+        <div class="tech-item"><b>Tool Calling</b><span id="techTools">Carregando…</span></div>
+        <div class="tech-item"><b>Servidor</b><span id="techServer">127.0.0.1 • somente local</span></div>
+      </div>
+      <ul class="endpoint-list">
+        <li><code>POST /api/ai/transcribe</code> — áudio → texto</li>
+        <li><code>POST /api/ai/command</code> — texto → ChatClient + Tool Calling</li>
+        <li><code>POST /api/ai/voice-command</code> — fluxo de voz em um único endpoint</li>
+        <li><code>POST /api/ai/speech</code> — texto → MP3 via Spring AI quando configurado</li>
+        <li><code>GET/POST /api/transactions</code> — consulta e criação REST</li>
+      </ul>
+      <button class="btn-secondary" type="button" onclick="loadSystemStatus()">Atualizar diagnóstico</button>
+      <div id="techFeedback" class="feedback" aria-live="polite"></div>
+    </div>
+  </details>
+
+  <footer>
+    Budget AI • evolução do projeto final da trilha DIO Spring Boot + Spring AI
+  </footer>
+</main>
+
+<script src="/app.js" defer></script>
+
+</body>
+</html>

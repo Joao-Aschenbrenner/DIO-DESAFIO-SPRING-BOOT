@@ -20,21 +20,20 @@ public class AiController {
 
     @PostMapping("/command")
     public AiResponse command(@Valid @RequestBody AiRequest request) {
-        String prompt = request.text().trim();
         String response = chatClient.prompt()
-                .user(prompt)
+                .user(request.text().trim())
                 .call()
                 .content();
 
         if (response == null || response.isBlank()) {
-            throw new IllegalStateException("A IA retornou uma resposta vazia.");
+            throw new IllegalStateException("O modelo de IA retornou uma resposta vazia.");
         }
         return new AiResponse(response.trim());
     }
 
     public record AiRequest(
-            @NotBlank(message = "O comando não pode ficar vazio.")
-            @Size(max = 4000, message = "O comando deve ter no máximo 4000 caracteres.")
+            @NotBlank(message = "Informe um comando para a IA.")
+            @Size(max = 1200, message = "O comando deve ter no máximo 1200 caracteres.")
             String text) {}
 
     public record AiResponse(String response) {}

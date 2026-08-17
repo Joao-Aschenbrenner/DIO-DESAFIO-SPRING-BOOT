@@ -1,6 +1,5 @@
 package br.com.jaaschenbrenner.budgetai.infrastructure.ai;
 
-import br.com.jaaschenbrenner.budgetai.infrastructure.delivery.AudioUploadValidator;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,16 +23,14 @@ public class VoiceCommandController {
 
     @PostMapping(value = "/voice-command", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public VoiceCommandResponse voiceCommand(@RequestPart("file") MultipartFile file) throws IOException {
-        AudioUploadValidator.validate(file);
-
         String transcription = audioClient.transcribe(file);
         if (transcription == null || transcription.isBlank()) {
-            throw new IllegalStateException("A NVIDIA não conseguiu identificar fala no áudio enviado.");
+            throw new IllegalStateException("A NVIDIA retornou uma transcrição vazia.");
         }
 
         String response = chatClient.prompt().user(transcription.trim()).call().content();
         if (response == null || response.isBlank()) {
-            throw new IllegalStateException("A IA processou o áudio, mas retornou uma resposta vazia.");
+            throw new IllegalStateException("O modelo de IA retornou uma resposta vazia após a transcrição.");
         }
 
         return new VoiceCommandResponse(transcription.trim(), response.trim());

@@ -1,6 +1,5 @@
 package br.com.jaaschenbrenner.budgetai.infrastructure.ai;
 
-import br.com.jaaschenbrenner.budgetai.infrastructure.delivery.AudioUploadValidator;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,13 +20,8 @@ public class TranscriptionController {
 
     @PostMapping(value = "/transcribe", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public TranscriptionResponse transcribe(@RequestPart("file") MultipartFile file) throws IOException {
-        AudioUploadValidator.validate(file);
-        String text = audioClient.transcribe(file);
-        if (text == null || text.isBlank()) {
-            throw new IllegalStateException("Nenhuma fala reconhecível foi encontrada no áudio.");
-        }
-        return new TranscriptionResponse(text.trim());
+        return new TranscriptionResponse(audioClient.transcribe(file));
     }
 
-    public record TranscriptionResponse(String transcription) {}
+    public record TranscriptionResponse(String text) {}
 }

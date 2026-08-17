@@ -12,17 +12,22 @@ class TransactionCategoryUiContractTest {
 
     @Test
     void manualTransactionUiMustUseDomainCategoryValues() throws Exception {
-        try (InputStream input = getClass().getResourceAsStream("/static/index.html")) {
+        String html = resource("/static/index.html");
+        String js = resource("/static/app.js");
+
+        for (Category category : Category.values()) {
+            assertThat(html).contains("value=\"" + category.name() + "\"");
+        }
+
+        assertThat(js).contains("/api/transactions/categories");
+        assertThat(html).doesNotContain("<option>TRANSPORT</option>");
+        assertThat(html).doesNotContain("<option>GROCERIES</option>");
+    }
+
+    private String resource(String path) throws Exception {
+        try (InputStream input = getClass().getResourceAsStream(path)) {
             assertThat(input).isNotNull();
-            String html = new String(input.readAllBytes(), StandardCharsets.UTF_8);
-
-            for (Category category : Category.values()) {
-                assertThat(html).contains("value=\"" + category.name() + "\"");
-            }
-
-            assertThat(html).contains("/api/transactions/categories");
-            assertThat(html).doesNotContain("<option>TRANSPORT</option>");
-            assertThat(html).doesNotContain("<option>GROCERIES</option>");
+            return new String(input.readAllBytes(), StandardCharsets.UTF_8);
         }
     }
 }

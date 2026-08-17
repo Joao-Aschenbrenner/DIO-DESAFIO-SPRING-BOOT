@@ -1,6 +1,5 @@
 package br.com.jaaschenbrenner.budgetai.infrastructure.ai;
 
-import br.com.jaaschenbrenner.budgetai.infrastructure.delivery.SpeechController;
 import org.springframework.ai.audio.tts.TextToSpeechModel;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,7 +14,7 @@ import java.util.Map;
 @RequestMapping("/api/system")
 public class AiProviderController {
 
-    private final ObjectProvider<TextToSpeechModel> speechModels;
+    private final ObjectProvider<TextToSpeechModel> speechModelProvider;
 
     @Value("${budgetai.ai.provider}")
     private String provider;
@@ -29,31 +28,42 @@ public class AiProviderController {
     @Value("${budgetai.ai.transcription-provider}")
     private String transcriptionProvider;
 
-    public AiProviderController(ObjectProvider<TextToSpeechModel> speechModels) {
-        this.speechModels = speechModels;
+    @Value("${spring.ai.openai.chat.api-key:not-configured}")
+    private String nvidiaApiKey;
+
+    @Value("${spring.ai.model.audio.speech:none}")
+    private String speechProvider;
+
+    public AiProviderController(ObjectProvider<TextToSpeechModel> speechModelProvider) {
+        this.speechModelProvider = speechModelProvider;
     }
 
     @GetMapping("/ai-provider")
     public Map<String, Object> aiProvider() {
-        String nvidiaKey = System.getenv("NVIDIA_API_KEY");
-        boolean nvidiaConfigured = nvidiaKey != null && !nvidiaKey.isBlank();
-        boolean springTtsConfigured = SpeechController.isTtsKeyConfigured() && speechModels.getIfAvailable() != null;
+        boolean configured = isConfiguredSecret(nvidiaApiKey);
+        boolean springAiSpeech = speechModelProvider.getIfAvailable() != null;
 
         Map<String, Object> status = new LinkedHashMap<>();
         status.put("provider", provider);
         status.put("model", model);
         status.put("baseUrl", baseUrl);
-        status.put("nvidiaConfigured", nvidiaConfigured);
-        status.put("textConfigured", nvidiaConfigured);
-        status.put("audioInputConfigured", nvidiaConfigured);
+        status.put("nvidiaConfigured", configured);
+        status.put("textConfigured", configured);
+        status.put("audioConfigured", configured);
         status.put("transcriptionProvider", transcriptionProvider);
-        status.put("modalities", "text,audio-input");
+        status.put("modalities", "text,audio");
         status.put("toolCalling", true);
-        status.put("springTtsAvailable", springTtsConfigured);
-        status.put("speechOutput", springTtsConfigured
-                ? "Spring AI TextToSpeechModel / MP3"
-                : "Web Speech API local (fallback)");
-        status.put("healthy", true);
+        status.put("springAiSpeechAvailable", springAiSpeech);
+        status.put("speechProvider", springAiSpeech ? speechProvider : "none");
+        status.put("speechFallback", "Web Speech API local (pt-BR)");
+        status.put("localOnlyServer", true);
         return status;
+    }
+
+    private boolean isConfiguredSecret(String value) {
+        return value != null
+                && !value.isBlank()
+                && !"not-configured".equalsIgnoreCase(value)
+                && !value.startsWith("${");
     }
 }
