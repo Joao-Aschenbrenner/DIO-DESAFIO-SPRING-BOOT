@@ -28,17 +28,19 @@ public class AiProviderController {
         String nvidiaKey = System.getenv("NVIDIA_API_KEY");
         boolean configured = nvidiaKey != null && !nvidiaKey.isBlank();
 
-        return Map.of(
-                "provider", provider,
-                "model", model,
-                "baseUrl", baseUrl,
-                "nvidiaConfigured", configured,
-                "textConfigured", configured,
-                "audioConfigured", configured,
-                "transcriptionProvider", transcriptionProvider,
-                "modalities", "text,audio",
-                "toolCalling", true,
-                "codexLogin", "official-windows-installer"
+        return Map.ofEntries(
+                Map.entry("provider", provider),
+                Map.entry("model", model),
+                Map.entry("baseUrl", baseUrl),
+                Map.entry("nvidiaConfigured", configured),
+                Map.entry("textConfigured", configured),
+                Map.entry("audioConfigured", configured),
+                Map.entry("transcriptionProvider", transcriptionProvider),
+                Map.entry("modalities", "text,audio"),
+                Map.entry("toolCalling", true),
+                Map.entry("speechOutput", "Web Speech API local (pt-BR)"),
+                Map.entry("speechOutputRequiresApiKey", false),
+                Map.entry("codexLogin", "official-windows-installer")
         );
     }
 }

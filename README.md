@@ -9,14 +9,14 @@ Assistente financeiro desenvolvido para o desafio final da trilha Spring Boot + 
 ## Fluxo principal
 
 ```text
-Texto ───────────────┐
-                    ↓
-Áudio → NVIDIA Omni → ChatClient + Tool Calling → Use Cases Java → JPA/H2 → resposta
+Texto ───────────────────────────────┐
+                                    ↓
+Áudio → NVIDIA Omni → ChatClient + Tool Calling → Use Cases Java → JPA/H2 → resposta → TTS local pt-BR
 ```
 
 A arquitetura mantém as camadas `domain`, `application` e `infrastructure`. A IA interpreta a intenção e escolhe ferramentas, enquanto as regras e operações reais continuam nos casos de uso Java.
 
-## Uma única API NVIDIA
+## IA com uma única API NVIDIA
 
 A versão atual usa a mesma credencial, o mesmo modelo e o mesmo endpoint NVIDIA para chat, Tool Calling e entrada de áudio:
 
@@ -30,11 +30,25 @@ Chave:    NVIDIA_API_KEY
 
 O fluxo de áudio não precisa de `OPENAI_API_KEY`. Arquivos WAV e MP3 são enviados ao Nemotron Omni. Áudios pequenos podem ir inline; arquivos maiores usam temporariamente o NVIDIA Cloud Functions Asset API e o asset é removido após o processamento.
 
-> Observação: o model card oficial da NVIDIA informa suporte de idioma **English only**. A qualidade prática de fala em português deve ser validada nos testes.
+> Observação: o model card da NVIDIA usado neste projeto informa suporte de idioma limitado para entrada de áudio. A qualidade prática da transcrição em português deve ser validada durante o teste do executável.
+
+## Resposta falada / Text-to-Speech
+
+A `v0.3.3` fecha o fluxo de voz até a saída: depois que o Spring AI recebe a resposta do modelo e executa as tools, a interface pode falar o texto em português brasileiro usando a **Web Speech API local do navegador**.
+
+Isso foi escolhido para manter o projeto instalável com somente `NVIDIA_API_KEY`, sem exigir uma segunda conta/chave apenas para sintetizar a resposta. O painel oferece:
+
+- reprodução automática depois de um comando por áudio;
+- botão **Ouvir resposta** para comandos por texto e por voz;
+- botão **Parar voz**;
+- preferência por voz `pt-BR`, com fallback para outra voz em português;
+- fallback seguro para texto quando o navegador não expõe síntese de voz.
+
+O projeto de referência da DIO demonstra `OpenAiAudioSpeechModel` em um teste de integração. Aqui o núcleo Spring AI permanece conectado à NVIDIA e a etapa final de síntese é local, evitando adicionar outro provedor cloud somente para TTS.
 
 ## Inicialização e robustez
 
-O starter OpenAI do Spring AI pode auto-configurar mais de um tipo de modelo. O Budget AI usa a compatibilidade OpenAI apenas para o `ChatModel` conectado à NVIDIA. Os módulos não utilizados ficam explicitamente desativados:
+O starter OpenAI do Spring AI pode auto-configurar mais de um tipo de modelo. O Budget AI usa a compatibilidade OpenAI apenas para o `ChatModel` conectado à NVIDIA. Os módulos cloud não utilizados ficam explicitamente desativados:
 
 ```properties
 spring.ai.model.chat=openai
@@ -45,7 +59,7 @@ spring.ai.model.embedding=none
 spring.ai.model.image=none
 ```
 
-Existe também um `ApplicationContextSmokeTest`, que deve falhar no CI caso o Spring Boot volte a exigir uma chave OpenAI durante o boot.
+Existe também um `ApplicationContextSmokeTest`, que deve falhar no CI caso o Spring Boot volte a exigir uma chave OpenAI durante o boot. A `v0.3.3` adiciona ainda um teste de contrato da interface que garante que o caminho de TTS local esteja empacotado no `index.html`.
 
 ## Tratamento de erros
 
@@ -68,7 +82,7 @@ O launcher Windows também usa `try/catch` por categoria de falha, lê o log qua
 
 ## Executável Windows
 
-A release `v0.3.2-windows` contém um instalador `.exe` com Java 21 embutido e **ícone próprio do Budget AI** no pacote Windows. Depois da instalação, abra **BudgetAI** pelo menu/atalho do Windows.
+A release `v0.3.3-windows` contém um instalador `.exe` com Java 21 embutido e **ícone próprio do Budget AI** no pacote Windows. Depois da instalação, abra **BudgetAI** pelo menu/atalho do Windows.
 
 O launcher:
 
@@ -106,15 +120,17 @@ POST /api/transactions
 - Spring Data JPA + H2 persistente;
 - REST API;
 - NVIDIA NIM;
-- Nemotron Omni para texto e áudio;
+- Nemotron Omni para texto e áudio de entrada;
 - Tool Calling com funções reais da aplicação;
 - transcrição de WAV/MP3;
 - comando financeiro por voz;
+- resposta falada local em pt-BR;
 - painel web local;
 - tratamento centralizado de exceções;
 - correlation ID nos erros;
 - smoke test de inicialização;
-- testes automatizados;
+- teste automatizado do fluxo de TTS na interface;
+- testes automatizados de domínio/aplicação;
 - GitHub Actions;
 - instalador Windows com Java embutido;
 - ícone próprio no instalador/atalhos Windows;
