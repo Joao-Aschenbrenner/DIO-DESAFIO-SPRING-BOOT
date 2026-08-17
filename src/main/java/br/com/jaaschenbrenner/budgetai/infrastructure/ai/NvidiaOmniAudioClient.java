@@ -16,6 +16,7 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 @Component
@@ -33,14 +34,17 @@ public class NvidiaOmniAudioClient {
                                  @Value("${budgetai.ai.base-url}") String baseUrl,
                                  @Value("${spring.ai.openai.chat.api-key}") String apiKey,
                                  @Value("${budgetai.ai.model}") String model) {
-        this.model = model;
+        this.model = requireText(model, "Modelo NVIDIA não configurado.");
+        String safeBaseUrl = requireText(baseUrl, "Base URL NVIDIA não configurada.");
+        String safeApiKey = requireText(apiKey, "NVIDIA API Key não configurada.");
+
         this.inferenceClient = builder.clone()
-                .baseUrl(baseUrl)
-                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
+                .baseUrl(safeBaseUrl)
+                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + safeApiKey)
                 .build();
         this.assetClient = builder.clone()
                 .baseUrl("https://api.nvcf.nvidia.com")
-                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
+                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + safeApiKey)
                 .build();
         this.uploadClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(30))
@@ -57,26 +61,27 @@ public class NvidiaOmniAudioClient {
 
         AudioFormat format = AudioFormat.from(file.getOriginalFilename(), file.getContentType());
         byte[] bytes = file.getBytes();
+        if (bytes.length == 0) {
+            throw new IllegalArgumentException("O arquivo de áudio está vazio.");
+        }
 
         try {
-            if (bytes.length <= INLINE_LIMIT_BYTES) {
-                return transcribeInline(bytes, format);
+            String result = bytes.length <= INLINE_LIMIT_BYTES
+                    ? transcribeInline(bytes, format)
+                    : transcribeUsingAsset(bytes, format);
+            if (result == null || result.isBlank()) {
+                throw new IllegalStateException("A NVIDIA NIM retornou uma transcrição vazia.");
             }
-            return transcribeUsingAsset(bytes, format);
+            return result.trim();
         } catch (RestClientResponseException ex) {
-            String body = ex.getResponseBodyAsString();
-            if (body != null && body.length() > 1200) {
-                body = body.substring(0, 1200) + "...";
-            }
             throw new IllegalStateException(
-                    "A NVIDIA NIM recusou a requisição (HTTP " + ex.getStatusCode().value() + "). " +
-                            (body == null || body.isBlank() ? ex.getMessage() : body), ex);
+                    "A NVIDIA NIM recusou a requisição (HTTP " + ex.getStatusCode().value() + ").", ex);
         }
     }
 
     private String transcribeInline(byte[] bytes, AudioFormat format) {
-        String dataUrl = "data:audio/" + format.nvidiaFormat() + ";base64," +
-                Base64.getEncoder().encodeToString(bytes);
+        String dataUrl = "data:audio/" + format.nvidiaFormat() + ";base64,"
+                + Base64.getEncoder().encodeToString(bytes);
 
         List<Map<String, Object>> content = List.of(
                 Map.of("type", "audio_url", "audio_url", Map.of("url", dataUrl)),
@@ -88,15 +93,16 @@ public class NvidiaOmniAudioClient {
 
     private String transcribeUsingAsset(byte[] bytes, AudioFormat format) throws IOException {
         AssetResponse asset = createAsset(format.uploadContentType());
-        if (asset == null || asset.assetId() == null || asset.uploadUrl() == null) {
-            throw new IllegalStateException("A NVIDIA não retornou assetId/uploadUrl para o áudio.");
+        if (asset == null || asset.assetId() == null || asset.assetId().isBlank()
+                || asset.uploadUrl() == null || asset.uploadUrl().isBlank()) {
+            throw new IllegalStateException("A NVIDIA não retornou os dados necessários para o upload temporário do áudio.");
         }
 
         try {
             uploadAsset(asset.uploadUrl(), bytes, format.uploadContentType());
 
-            String prompt = "<audio src=\"data:audio/" + format.nvidiaFormat() +
-                    ";asset_id," + asset.assetId() + "\" />\n" + transcriptionInstruction();
+            String prompt = "<audio src=\"data:audio/" + format.nvidiaFormat()
+                    + ";asset_id," + asset.assetId() + "\" />\n" + transcriptionInstruction();
 
             return invoke(List.of(Map.of("role", "user", "content", prompt)), asset.assetId());
         } finally {
@@ -105,8 +111,8 @@ public class NvidiaOmniAudioClient {
     }
 
     private String transcriptionInstruction() {
-        return "Transcribe the speech in the original spoken language. Do not translate. " +
-                "Return only the transcription, without comments, summaries or markdown.";
+        return "Transcribe the speech in the original spoken language. Do not translate. "
+                + "Return only the transcription, without comments, summaries or markdown.";
     }
 
     private String invoke(List<Map<String, Object>> messages, String assetId) {
@@ -154,8 +160,16 @@ public class NvidiaOmniAudioClient {
     }
 
     private void uploadAsset(String uploadUrl, byte[] bytes, String contentType) throws IOException {
+        URI uri;
         try {
-            HttpRequest request = HttpRequest.newBuilder(URI.create(uploadUrl))
+            uri = URI.create(uploadUrl);
+        } catch (IllegalArgumentException ex) {
+            throw new IOException("A NVIDIA retornou uma URL de upload inválida.", ex);
+        }
+        validateUploadUri(uri);
+
+        try {
+            HttpRequest request = HttpRequest.newBuilder(uri)
                     .timeout(Duration.ofMinutes(5))
                     .header("Content-Type", contentType)
                     .header("x-amz-meta-nvcf-asset-description", ASSET_DESCRIPTION)
@@ -164,12 +178,28 @@ public class NvidiaOmniAudioClient {
 
             HttpResponse<Void> response = uploadClient.send(request, HttpResponse.BodyHandlers.discarding());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new IOException("Falha ao enviar áudio para o asset temporário NVIDIA. HTTP " +
-                        response.statusCode());
+                throw new IOException("Falha ao enviar o áudio para o armazenamento temporário NVIDIA. HTTP "
+                        + response.statusCode());
             }
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             throw new IOException("Upload do áudio para NVIDIA foi interrompido.", ex);
+        }
+    }
+
+    private void validateUploadUri(URI uri) throws IOException {
+        String scheme = uri.getScheme();
+        String host = uri.getHost();
+        if (!"https".equalsIgnoreCase(scheme) || host == null || host.isBlank()) {
+            throw new IOException("A NVIDIA retornou uma URL de upload não segura.");
+        }
+
+        String normalizedHost = host.toLowerCase(Locale.ROOT);
+        if (normalizedHost.equals("localhost")
+                || normalizedHost.equals("127.0.0.1")
+                || normalizedHost.equals("0.0.0.0")
+                || normalizedHost.equals("::1")) {
+            throw new IOException("A NVIDIA retornou um destino de upload local inválido.");
         }
     }
 
@@ -183,8 +213,15 @@ public class NvidiaOmniAudioClient {
                     .retrieve()
                     .toBodilessEntity();
         } catch (Exception ignored) {
-            // Assets também são coletados automaticamente pela NVIDIA.
+            // Assets temporários também possuem ciclo de vida controlado pela NVIDIA.
         }
+    }
+
+    private String requireText(String value, String message) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException(message);
+        }
+        return value.trim();
     }
 
     private record ChatRequest(
@@ -213,8 +250,8 @@ public class NvidiaOmniAudioClient {
 
     private record AudioFormat(String nvidiaFormat, String uploadContentType) {
         static AudioFormat from(String filename, String contentType) {
-            String name = filename == null ? "" : filename.toLowerCase();
-            String type = contentType == null ? "" : contentType.toLowerCase();
+            String name = filename == null ? "" : filename.toLowerCase(Locale.ROOT);
+            String type = contentType == null ? "" : contentType.toLowerCase(Locale.ROOT);
 
             if (name.endsWith(".wav") || type.contains("wav") || type.contains("wave")) {
                 return new AudioFormat("wav", "audio/wav");
