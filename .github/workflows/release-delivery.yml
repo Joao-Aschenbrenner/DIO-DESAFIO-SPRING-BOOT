@@ -1,0 +1,122 @@
+name: Release Delivery Candidate
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/release-delivery.yml'
+      - 'release/windows/launcher/WindowsLauncherDelivery.java'
+      - 'release/windows/budgetai.ico'
+      - 'src/main/**'
+      - 'src/test/**'
+      - 'build.gradle'
+      - 'README.md'
+
+permissions:
+  contents: write
+
+jobs:
+  delivery:
+    runs-on: windows-latest
+    timeout-minutes: 50
+    env:
+      TAG: v0.3.5-windows
+      VERSION: 0.3.5
+      EXE: BudgetAI-Setup-v0.3.5-Windows-x64.exe
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Verify delivery UI contract
+        shell: pwsh
+        run: |
+          $ui = Get-Content 'src/main/resources/static/app.html' -Raw
+          if ($ui -notmatch 'Experimente o fluxo do desafio') { throw 'Delivery UI marker missing' }
+          if ($ui -match 'Valor em centavos') { throw 'Legacy cents label is still visible' }
+          if ($ui -match '<option>TRANSPORT</option>') { throw 'Legacy category mismatch found' }
+          if ($ui -notmatch '/api/ai/speech') { throw 'Spring AI speech path missing from UI' }
+          Write-Host 'Delivery UI static contract: OK'
+
+      - name: Test and build
+        run: gradle clean test bootJar --no-daemon --warning-mode all
+
+      - name: Compile delivery launcher
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force launcher-classes,package-input | Out-Null
+          javac -encoding UTF-8 -d launcher-classes release/windows/launcher/WindowsLauncherDelivery.java
+          if ($LASTEXITCODE -ne 0) { throw 'Delivery launcher compilation failed' }
+          jar --create --file package-input/launcher.jar --main-class br.com.jaaschenbrenner.budgetai.launcher.WindowsLauncherDelivery -C launcher-classes .
+          $app = Get-ChildItem build/libs/*.jar | Where-Object { $_.Name -notlike '*-plain.jar' } | Select-Object -First 1
+          if (-not $app) { throw 'Spring Boot JAR not found' }
+          Copy-Item $app.FullName package-input/budget-ai.jar
+
+      - name: Validate Windows icon
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'release/windows/budgetai.ico')) { throw 'Custom BudgetAI icon not found' }
+          $icon = Get-Item 'release/windows/budgetai.ico'
+          if ($icon.Length -lt 1024) { throw 'Custom BudgetAI icon is unexpectedly small' }
+          Write-Host "Custom icon ready: $($icon.FullName) ($($icon.Length) bytes)"
+
+      - name: Download bundled Java runtime
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP 'jre21.zip'
+          $dir = Join-Path $env:RUNNER_TEMP 'jre21'
+          Invoke-WebRequest 'https://api.adoptium.net/v3/binary/latest/21/ga/windows/x64/jre/hotspot/normal/eclipse' -OutFile $zip
+          Expand-Archive $zip $dir -Force
+          $root = Get-ChildItem $dir -Directory | Select-Object -First 1
+          if (-not $root) { throw 'JRE not found' }
+          "JRE_ROOT=$($root.FullName)" | Out-File $env:GITHUB_ENV -Append
+
+      - name: Ensure WiX
+        shell: pwsh
+        run: |
+          if (-not (Get-Command light.exe -ErrorAction SilentlyContinue)) {
+            choco install wixtoolset --no-progress -y
+            $wix = Get-ChildItem "${env:ProgramFiles(x86)}" -Directory | Where-Object { $_.Name -like 'WiX Toolset*' } | Sort-Object Name -Descending | Select-Object -First 1
+            if ($wix) {
+              $bin = Join-Path $wix.FullName 'bin'
+              $bin | Out-File $env:GITHUB_PATH -Append
+              $env:PATH = "$bin;$env:PATH"
+            }
+          }
+          where.exe light.exe
+
+      - name: Build installer EXE
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          jpackage --type exe --name BudgetAI --app-version $env:VERSION --vendor 'Joao Aschenbrenner - DIO' --description 'Assistente financeiro Spring Boot + Spring AI para o desafio DIO' --icon 'release/windows/budgetai.ico' --input package-input --main-jar launcher.jar --main-class br.com.jaaschenbrenner.budgetai.launcher.WindowsLauncherDelivery --runtime-image $env:JRE_ROOT --dest dist --win-dir-chooser --win-menu --win-shortcut --win-per-user-install
+          if ($LASTEXITCODE -ne 0) { throw 'jpackage failed' }
+          $generated = Get-ChildItem dist/*.exe | Select-Object -First 1
+          if (-not $generated) { throw 'EXE not generated' }
+          Copy-Item $generated.FullName $env:EXE
+          (Get-FileHash $env:EXE -Algorithm SHA256).Hash.ToLower() | Out-File "$env:EXE.sha256" -Encoding ascii
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BudgetAI-Delivery-Candidate-v0.3.5
+          path: |
+            ${{ env.EXE }}
+            ${{ env.EXE }}.sha256
+
+      - name: Publish prerelease
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view $env:TAG 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $env:TAG --target $env:GITHUB_SHA --title 'Budget AI v0.3.5 - DIO Delivery Candidate' --prerelease --notes 'Delivery Candidate para o desafio DIO Spring Boot + Spring AI. Redesign responsivo e explicativo; fluxo de voz em destaque; transações legíveis em R$; categorias sincronizadas com o domínio; Tool Calling endurecido; validação de uploads e comandos; tratamento adicional de rede, banco e TTS; Spring AI TextToSpeechModel com MP3 quando BUDGETAI_TTS_API_KEY é informada e Web Speech API como fallback; Java 21 embutido e ícone próprio no Windows.'
+          }
+          gh release upload $env:TAG $env:EXE "$env:EXE.sha256" --clobber
