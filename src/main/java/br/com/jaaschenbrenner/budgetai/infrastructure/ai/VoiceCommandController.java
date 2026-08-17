@@ -24,8 +24,16 @@ public class VoiceCommandController {
     @PostMapping(value = "/voice-command", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public VoiceCommandResponse voiceCommand(@RequestPart("file") MultipartFile file) throws IOException {
         String transcription = audioClient.transcribe(file);
-        String response = chatClient.prompt().user(transcription).call().content();
-        return new VoiceCommandResponse(transcription, response);
+        if (transcription == null || transcription.isBlank()) {
+            throw new IllegalStateException("A NVIDIA retornou uma transcrição vazia.");
+        }
+
+        String response = chatClient.prompt().user(transcription.trim()).call().content();
+        if (response == null || response.isBlank()) {
+            throw new IllegalStateException("O modelo de IA retornou uma resposta vazia após a transcrição.");
+        }
+
+        return new VoiceCommandResponse(transcription.trim(), response.trim());
     }
 
     public record VoiceCommandResponse(String transcription, String response) {}
