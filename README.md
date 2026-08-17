@@ -4,9 +4,20 @@
 
 # Budget AI — Desafio DIO Spring Boot + Spring AI
 
-Assistente financeiro desenvolvido como evolução do projeto final da trilha **Spring Boot + Spring AI** da DIO.
+Assistente financeiro desenvolvido como evolução do projeto final da trilha **Santander 2026 — Java Backend**, disponibilizada pela DIO.
 
-A proposta é demonstrar o fluxo pedido no desafio sem colocar regra de negócio dentro do modelo de IA: a IA entende a intenção e escolhe ferramentas; as operações reais continuam nos casos de uso Java e na persistência da aplicação.
+**Curso / trilha:** https://web.dio.me/track/santander-2026-java-backend
+
+A proposta é demonstrar, na prática, os conceitos apresentados no curso para integrar **Spring Boot**, **Spring AI**, modelos de IA, transcrição de áudio e **Tool Calling** sem colocar regra de negócio dentro do modelo: a IA entende a intenção e escolhe ferramentas; as operações reais continuam nos casos de uso Java e na persistência da aplicação.
+
+## Links da entrega
+
+- **Repositório:** https://github.com/Joao-Aschenbrenner/DIO-DESAFIO-SPRING-BOOT
+- **Releases:** https://github.com/Joao-Aschenbrenner/DIO-DESAFIO-SPRING-BOOT/releases
+- **Release Windows v0.3.5:** https://github.com/Joao-Aschenbrenner/DIO-DESAFIO-SPRING-BOOT/releases/tag/v0.3.5-windows
+- **Instalador Windows x64:** https://github.com/Joao-Aschenbrenner/DIO-DESAFIO-SPRING-BOOT/releases/download/v0.3.5-windows/BudgetAI-Setup-v0.3.5-Windows-x64.exe
+- **Trilha Santander 2026 — Java Backend:** https://web.dio.me/track/santander-2026-java-backend
+- **Projeto de referência Spring AI da DIO:** https://github.com/digitalinnovationone/dio-spring-boot-learning-track/tree/main/05-spring-ai
 
 ## O que o projeto faz
 
@@ -191,21 +202,7 @@ A API usa `@RestControllerAdvice` e retorna uma estrutura consistente:
 }
 ```
 
-Há tratamento específico para:
-
-- validação de body;
-- JSON/categoria inválidos;
-- parâmetro inválido;
-- arquivo obrigatório ausente;
-- arquivo acima de 50 MB;
-- formato HTTP não suportado;
-- endpoint/método inválido;
-- erro de persistência;
-- erro do provedor NVIDIA;
-- erro do TTS;
-- TTS não configurado;
-- I/O;
-- erro inesperado.
+Há tratamento específico para validação de body, JSON/categoria inválidos, parâmetros inválidos, arquivo obrigatório ausente, arquivo acima de 50 MB, formato HTTP não suportado, endpoint/método inválido, erro de persistência, erro do provedor NVIDIA, erro do TTS, TTS não configurado, I/O e erro inesperado.
 
 Stack traces ficam somente no log. A interface mostra primeiro uma mensagem humana e deixa código/correlação dentro de **detalhes técnicos**.
 
@@ -283,8 +280,6 @@ Sem essas duas variáveis, a aplicação inicia normalmente e usa TTS local no n
 
 ### Texto
 
-Exemplos:
-
 ```text
 Registre uma despesa de 25 reais com Uber.
 Liste todas as minhas despesas.
@@ -303,40 +298,32 @@ Execute:
 gradle clean test
 ```
 
-A suíte cobre, entre outros pontos:
-
-- criação de transação;
-- invariantes do domínio;
-- inicialização do ApplicationContext;
-- categorias da interface alinhadas ao enum Java;
-- parâmetro opcional da tool de listagem;
-- TTS Spring AI + fallback local;
-- comportamento do `SpeechController`;
-- contrato de responsividade/explicação da UI;
-- configurações locais de segurança.
+A suíte cobre, entre outros pontos, criação de transação, invariantes do domínio, inicialização do ApplicationContext, categorias da interface alinhadas ao enum Java, parâmetro opcional da tool de listagem, TTS Spring AI + fallback local, comportamento do `SpeechController`, contrato de responsividade/explicação da UI e configurações locais de segurança.
 
 O workflow Windows também executa testes antes de montar o instalador.
 
 ## Executável Windows
 
-O instalador é produzido com `jpackage` e inclui:
-
-- Java 21 embutido;
-- launcher gráfico;
-- ícone próprio Budget AI;
-- backend Spring Boot;
-- criação de atalho/menu;
-- banco e logs em `%LOCALAPPDATA%\BudgetAI`.
+O instalador é produzido com `jpackage` e inclui Java 21 embutido, launcher gráfico, ícone próprio Budget AI, backend Spring Boot, criação de atalho/menu e banco/logs em `%LOCALAPPDATA%\BudgetAI`.
 
 O launcher solicita:
 
 - **NVIDIA NIM API Key** — obrigatória;
 - **OpenAI API Key para TTS** — opcional.
 
+### Release atual
+
+**Budget AI v0.3.5 — Delivery Candidate**
+
+- Release: https://github.com/Joao-Aschenbrenner/DIO-DESAFIO-SPRING-BOOT/releases/tag/v0.3.5-windows
+- Instalador: https://github.com/Joao-Aschenbrenner/DIO-DESAFIO-SPRING-BOOT/releases/download/v0.3.5-windows/BudgetAI-Setup-v0.3.5-Windows-x64.exe
+- Todas as releases: https://github.com/Joao-Aschenbrenner/DIO-DESAFIO-SPRING-BOOT/releases
+
 ## O que aprendi / decisões do projeto
 
 Os principais aprendizados desta evolução foram:
 
+- aplicar IA de forma integrada a uma aplicação Java real, seguindo os conceitos apresentados na trilha Santander 2026 — Java Backend;
 - a IA deve decidir **qual operação** executar, mas a regra real pertence à aplicação;
 - Tool Calling precisa de schemas e parâmetros bem descritos para reduzir chamadas erradas;
 - validação só no controller não é suficiente, porque uma tool pode chamar o caso de uso diretamente;
@@ -344,10 +331,15 @@ Os principais aprendizados desta evolução foram:
 - uma interface de demonstração deve explicar o fluxo, não apenas imprimir JSON;
 - recursos opcionais, como TTS cloud, não devem derrubar a aplicação quando não estão configurados.
 
-## Projeto de referência da DIO
+## Curso e projeto de referência da DIO
 
-O projeto foi construído a partir dos conceitos apresentados na trilha:
+Este projeto foi desenvolvido para a trilha:
+
+**Santander 2026 — Java Backend**  
+https://web.dio.me/track/santander-2026-java-backend
+
+Os conceitos de Spring AI aplicados nesta entrega seguem os ensinamentos e a base disponibilizada no curso, especialmente o projeto final de Spring AI:
 
 https://github.com/digitalinnovationone/dio-spring-boot-learning-track/tree/main/05-spring-ai
 
-Esta implementação é uma evolução própria para fins de estudo e entrega do desafio.
+Esta implementação é uma evolução própria para fins de estudo e entrega do desafio, incluindo interface responsiva, NVIDIA NIM, tratamento de erros, testes, TTS e instalador Windows.
