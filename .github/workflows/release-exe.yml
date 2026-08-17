@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/release-exe.yml'
       - 'release/windows/launcher/WindowsLauncher.java'
+      - 'release/windows/budgetai.ico'
       - 'src/main/java/br/com/jaaschenbrenner/budgetai/infrastructure/ai/**'
       - 'src/main/java/br/com/jaaschenbrenner/budgetai/infrastructure/web/**'
       - 'src/main/resources/application.properties'
@@ -22,19 +23,19 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 45
     env:
-      TAG: v0.3.1-windows
-      VERSION: 0.3.1
-      EXE: BudgetAI-Setup-v0.3.1-Windows-x64.exe
+      TAG: v0.3.2-windows
+      VERSION: 0.3.2
+      EXE: BudgetAI-Setup-v0.3.2-Windows-x64.exe
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: Test and build
         run: gradle clean test bootJar
@@ -48,6 +49,14 @@ jobs:
           $app = Get-ChildItem build/libs/*.jar | Where-Object { $_.Name -notlike '*-plain.jar' } | Select-Object -First 1
           if (-not $app) { throw 'Spring Boot JAR not found' }
           Copy-Item $app.FullName package-input/budget-ai.jar
+
+      - name: Validate Windows icon
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'release/windows/budgetai.ico')) { throw 'Custom BudgetAI icon not found' }
+          $icon = Get-Item 'release/windows/budgetai.ico'
+          if ($icon.Length -lt 1024) { throw 'Custom BudgetAI icon is unexpectedly small' }
+          Write-Host "Custom icon ready: $($icon.FullName) ($($icon.Length) bytes)"
 
       - name: Download bundled Java runtime
         shell: pwsh
@@ -78,7 +87,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
-          jpackage --type exe --name BudgetAI --app-version $env:VERSION --vendor 'Joao Aschenbrenner - DIO' --description 'DIO Spring AI com NVIDIA NIM Omni' --input package-input --main-jar launcher.jar --main-class br.com.jaaschenbrenner.budgetai.launcher.WindowsLauncher --runtime-image $env:JRE_ROOT --dest dist --win-dir-chooser --win-menu --win-shortcut --win-per-user-install
+          jpackage --type exe --name BudgetAI --app-version $env:VERSION --vendor 'Joao Aschenbrenner - DIO' --description 'DIO Spring AI com NVIDIA NIM Omni' --icon 'release/windows/budgetai.ico' --input package-input --main-jar launcher.jar --main-class br.com.jaaschenbrenner.budgetai.launcher.WindowsLauncher --runtime-image $env:JRE_ROOT --dest dist --win-dir-chooser --win-menu --win-shortcut --win-per-user-install
           if ($LASTEXITCODE -ne 0) { throw 'jpackage failed' }
           $generated = Get-ChildItem dist/*.exe | Select-Object -First 1
           if (-not $generated) { throw 'EXE not generated' }
@@ -87,7 +96,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: BudgetAI-Windows-EXE-v0.3.1
+          name: BudgetAI-Windows-EXE-v0.3.2
           path: |
             ${{ env.EXE }}
             ${{ env.EXE }}.sha256
@@ -99,6 +108,6 @@ jobs:
         run: |
           gh release view $env:TAG 2>$null
           if ($LASTEXITCODE -ne 0) {
-            gh release create $env:TAG --target $env:GITHUB_SHA --title 'Budget AI v0.3.1 - NVIDIA Omni Windows' --prerelease --notes 'Correção do boot do Spring AI: OpenAI Moderation e demais modelos não utilizados ficam explicitamente desativados. Inclui smoke test do ApplicationContext, tratamento centralizado de exceções com correlationId, mensagens amigáveis para erros NVIDIA/upload/validação, launcher com diagnóstico automático e botão Abrir log, logo SVG e uma única NVIDIA_API_KEY para texto, áudio e Tool Calling.'
+            gh release create $env:TAG --target $env:GITHUB_SHA --title 'Budget AI v0.3.2 - NVIDIA Omni Windows' --prerelease --notes 'Release de teste para entrega DIO. Inclui ícone próprio Budget AI no instalador/atalhos Windows, Java 21 embutido, smoke test do ApplicationContext, tratamento centralizado de exceções com correlationId, launcher com diagnóstico e uma única NVIDIA_API_KEY para texto, áudio e Tool Calling.'
           }
           gh release upload $env:TAG $env:EXE "$env:EXE.sha256" --clobber

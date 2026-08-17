@@ -32,9 +32,9 @@ O fluxo de áudio não precisa de `OPENAI_API_KEY`. Arquivos WAV e MP3 são envi
 
 > Observação: o model card oficial da NVIDIA informa suporte de idioma **English only**. A qualidade prática de fala em português deve ser validada nos testes.
 
-## Correção de inicialização da v0.3.1
+## Inicialização e robustez
 
-O starter OpenAI do Spring AI pode auto-configurar mais de um tipo de modelo. O Budget AI usa a compatibilidade OpenAI apenas para o `ChatModel` conectado à NVIDIA. Os módulos não utilizados agora ficam explicitamente desativados:
+O starter OpenAI do Spring AI pode auto-configurar mais de um tipo de modelo. O Budget AI usa a compatibilidade OpenAI apenas para o `ChatModel` conectado à NVIDIA. Os módulos não utilizados ficam explicitamente desativados:
 
 ```properties
 spring.ai.model.chat=openai
@@ -68,7 +68,7 @@ O launcher Windows também usa `try/catch` por categoria de falha, lê o log qua
 
 ## Executável Windows
 
-A release `v0.3.1-windows` contém um instalador `.exe` com Java 21 embutido. Depois da instalação, abra **BudgetAI** pelo menu/atalho do Windows.
+A release `v0.3.2-windows` contém um instalador `.exe` com Java 21 embutido e **ícone próprio do Budget AI** no pacote Windows. Depois da instalação, abra **BudgetAI** pelo menu/atalho do Windows.
 
 O launcher:
 
@@ -117,6 +117,7 @@ POST /api/transactions
 - testes automatizados;
 - GitHub Actions;
 - instalador Windows com Java embutido;
+- ícone próprio no instalador/atalhos Windows;
 - logo vetorial SVG próprio.
 
 ## Desenvolvimento local
